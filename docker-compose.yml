@@ -1,0 +1,14 @@
+services:
+  mealflow-app:
+    build: .
+    container_name: mealflow
+    restart: always
+    ports:
+      - "3001:3000"
+    env_file: .env
+    networks:
+      - smartapp-network
+
+networks:
+  smartapp-network:
+    external: true
