@@ -2,123 +2,171 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import { MongoClient, ObjectId } from "mongodb";
 import mongoose from 'mongoose';
 import { User, Group, Dish, WeeklyPlan, ShoppingListItem } from './models.js';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// MongoDB Connection
-let client: MongoClient | null = null;
-const dbName = "mealflow";
+// --- Validation Schemas ---
+const RegisterSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+    name: z.string().optional(),
+  }),
+});
 
-async function getDb() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
+const LoginSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    password: z.string(),
+  }),
+});
+
+const DishSchema = z.object({
+  body: z.object({
+    name: z.string().min(1),
+    category: z.string(),
+    suitableForLunch: z.boolean(),
+    suitableForDinner: z.boolean(),
+    prepTime: z.number().min(0),
+    ingredients: z.array(z.object({
+      name: z.string(),
+      quantity: z.string(),
+      category: z.string()
+    })).optional()
+  }),
+});
+
+const ShoppingItemSchema = z.object({
+  body: z.object({
+    name: z.string(),
+    quantity: z.string(),
+    category: z.string(),
+    purchased: z.boolean().optional()
+  })
+});
+
+// --- Validation Middleware ---
+const validate = (schema: z.ZodObject) => 
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await schema.parseAsync({
+        body: req.body,
+        query: req.query,
+        params: req.params,
+      });
+      return next();
+    } catch (error) {
+      // Retorna los errores de validación de forma legible
+      return res.status(400).json({
+        error: "Validation failed",
+        details: error instanceof z.ZodError ? error.issues : error
+      });
+    }
+  };
+
+
+async function connectDb() {
+  if (!MONGODB_URI) {
     throw new Error("MONGODB_URI environment variable is required");
   }
   
   if (mongoose.connection.readyState === 0) {
-    console.log("Connecting Mongoose to MongoDB Atlas...");
-    await mongoose.connect(uri, { dbName });
-    console.log("Connected Mongoose to MongoDB Atlas...");
-  }
-
-  if (!client) {
-    console.log("Connecting MongoClient to MongoDB Atlas...");
-    client = new MongoClient(uri);
-    await client.connect();
-  }
-  return client.db(dbName);
-}
-
-// Helper to seed initial data if empty
-async function seedData() {
-  try {
-    await getDb();
-    
-    // Seed Groups
-    let homeGroup = await Group.findOne({ name: "Home" });
-    if (!homeGroup) {
-      homeGroup = new Group({ name: "Home", members: ["user-1", "user@example.com"] });
-      await homeGroup.save();
-      console.log("Seeded Home group");
-    }
-    
-    // Seed Dishes
-    const dishesCount = await Dish.countDocuments();
-    if (dishesCount === 0) {
-      console.log("No dishes found, seeding initial set...");
-      const initialDishes = [
-        {
-          groupId: homeGroup._id.toString(),
-          name: "Lentil Soup",
-          category: "Soups",
-          suitableForLunch: true,
-          suitableForDinner: true,
-          ingredients: [
-            { name: "Lentils", quantity: "200g", category: "Pantry" },
-            { name: "Carrot", quantity: "2", category: "Vegetables" },
-            { name: "Onion", quantity: "1", category: "Vegetables" }
-          ],
-          prepTime: 30
-        },
-        {
-          groupId: homeGroup._id.toString(),
-          name: "Grilled Chicken Salad",
-          category: "Salads",
-          suitableForLunch: true,
-          suitableForDinner: false,
-          ingredients: [
-            { name: "Chicken Breast", quantity: "300g", category: "Proteins" },
-            { name: "Lettuce", quantity: "1 head", category: "Vegetables" },
-            { name: "Cherry Tomatoes", quantity: "10", category: "Vegetables" }
-          ],
-          prepTime: 20
-        },
-        {
-          groupId: homeGroup._id.toString(),
-          name: "Pasta Carbonara",
-          category: "Pasta",
-          suitableForLunch: true,
-          suitableForDinner: true,
-          ingredients: [
-            { name: "Spaghetti", quantity: "400g", category: "Pantry" },
-            { name: "Eggs", quantity: "3", category: "Dairy/Eggs" },
-            { name: "Guanciale", quantity: "150g", category: "Proteins" }
-          ],
-          prepTime: 15
-        },
-        {
-          groupId: homeGroup._id.toString(),
-          name: "Beef Stir-fry",
-          category: "Asian",
-          suitableForLunch: false,
-          suitableForDinner: true,
-          ingredients: [
-            { name: "Beef strips", quantity: "300g", category: "Proteins" },
-            { name: "Broccoli", quantity: "1 head", category: "Vegetables" },
-            { name: "Soy Sauce", quantity: "2 tbsp", category: "Pantry" }
-          ],
-          prepTime: 25
-        }
-      ];
-      await Dish.insertMany(initialDishes);
-      console.log("Seeded initial dishes successfully");
-    }
-  } catch (error) {
-    console.error("Seeding failed:", error);
+    console.log("Connecting Mongoose to MongoDB...");
+    await mongoose.connect(MONGODB_URI, { dbName: "mealflow" });
   }
 }
+
+// // Helper to seed initial data if empty
+// async function seedData() {
+//   try {
+//     await connectDb();
+    
+//     // Seed Groups
+//     let homeGroup = await Group.findOne({ name: "Home" });
+//     if (!homeGroup) {
+//       homeGroup = new Group({ name: "Home", members: ["user-1", "user@example.com"] });
+//       await homeGroup.save();
+//       console.log("Seeded Home group");
+//     }
+    
+//     // Seed Dishes
+//     const dishesCount = await Dish.countDocuments();
+//     if (dishesCount === 0) {
+//       console.log("No dishes found, seeding initial set...");
+//       const initialDishes = [
+//         {
+//           groupId: homeGroup._id.toString(),
+//           name: "Lentil Soup",
+//           category: "Soups",
+//           suitableForLunch: true,
+//           suitableForDinner: true,
+//           ingredients: [
+//             { name: "Lentils", quantity: "200g", category: "Pantry" },
+//             { name: "Carrot", quantity: "2", category: "Vegetables" },
+//             { name: "Onion", quantity: "1", category: "Vegetables" }
+//           ],
+//           prepTime: 30
+//         },
+//         {
+//           groupId: homeGroup._id.toString(),
+//           name: "Grilled Chicken Salad",
+//           category: "Salads",
+//           suitableForLunch: true,
+//           suitableForDinner: false,
+//           ingredients: [
+//             { name: "Chicken Breast", quantity: "300g", category: "Proteins" },
+//             { name: "Lettuce", quantity: "1 head", category: "Vegetables" },
+//             { name: "Cherry Tomatoes", quantity: "10", category: "Vegetables" }
+//           ],
+//           prepTime: 20
+//         },
+//         {
+//           groupId: homeGroup._id.toString(),
+//           name: "Pasta Carbonara",
+//           category: "Pasta",
+//           suitableForLunch: true,
+//           suitableForDinner: true,
+//           ingredients: [
+//             { name: "Spaghetti", quantity: "400g", category: "Pantry" },
+//             { name: "Eggs", quantity: "3", category: "Dairy/Eggs" },
+//             { name: "Guanciale", quantity: "150g", category: "Proteins" }
+//           ],
+//           prepTime: 15
+//         },
+//         {
+//           groupId: homeGroup._id.toString(),
+//           name: "Beef Stir-fry",
+//           category: "Asian",
+//           suitableForLunch: false,
+//           suitableForDinner: true,
+//           ingredients: [
+//             { name: "Beef strips", quantity: "300g", category: "Proteins" },
+//             { name: "Broccoli", quantity: "1 head", category: "Vegetables" },
+//             { name: "Soy Sauce", quantity: "2 tbsp", category: "Pantry" }
+//           ],
+//           prepTime: 25
+//         }
+//       ];
+//       await Dish.insertMany(initialDishes);
+//       console.log("Seeded initial dishes successfully");
+//     }
+//   } catch (error) {
+//     console.error("Seeding failed:", error);
+//   }
+// }
 
 async function startServer() {
   const app = express();
@@ -128,10 +176,11 @@ async function startServer() {
 
   // Connect to DB immediately
   try {
-    await getDb();
-    await seedData();
+    await connectDb();
+    // await seedData();
   } catch (err) {
     console.error("Critical: Could not connect to DB", err);
+    process.exit(1);
   }
 
   // --- Auth Middleware ---
@@ -148,7 +197,7 @@ async function startServer() {
   };
 
   // --- Auth Routes ---
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", validate(RegisterSchema), async (req: Request, res: Response) => {
     try {
       const { email, password, name } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
@@ -170,7 +219,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", validate(LoginSchema), async (req, res) => {
     try {
       const { email, password } = req.body;
       const user = await User.findOne({ email });
@@ -236,7 +285,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/groups/:groupId/dishes", authenticateToken, async (req: any, res) => {
+  app.post("/api/groups/:groupId/dishes", authenticateToken, validate(DishSchema), async (req: any, res) => {
     try {
       const groupId = req.params.groupId;
       const groupCheck = await Group.findById(groupId);
@@ -254,7 +303,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/groups/:groupId/dishes/:dishId", authenticateToken, async (req: any, res) => {
+  app.put("/api/groups/:groupId/dishes/:dishId", authenticateToken, validate(DishSchema), async (req: any, res) => {
     try {
       const dishId = req.params.dishId;
       const updateData = { ...req.body };
@@ -402,7 +451,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/groups/:groupId/shopping-list", authenticateToken, async (req, res) => {
+  app.post("/api/groups/:groupId/shopping-list", authenticateToken, validate(ShoppingItemSchema), async (req, res) => {
     try {
       const newItem = new ShoppingListItem({
         groupId: req.params.groupId,
@@ -415,7 +464,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/shopping-list/:itemId", authenticateToken, async (req, res) => {
+  app.put("/api/shopping-list/:itemId", authenticateToken, validate(ShoppingItemSchema), async (req, res) => {
     try {
       const itemId = req.params.itemId;
       const { id, _id, ...updateData } = req.body;
