@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -26,6 +30,7 @@ async function getDb() {
   if (mongoose.connection.readyState === 0) {
     console.log("Connecting Mongoose to MongoDB Atlas...");
     await mongoose.connect(uri, { dbName });
+    console.log("Connected Mongoose to MongoDB Atlas...");
   }
 
   if (!client) {

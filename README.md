@@ -88,3 +88,12 @@ npm run dev
 npm run build
 npm start
 ```
+
+TODO:
+Refactor server.ts: Remove MongoClient and use Mongoose exclusively. Implement a validation middleware like Zod to validate incoming request bodies.
+
+Centralize Utilities: Move date-handling logic (getWeekId) and ingredient-parsing logic into a separate utils folder.
+
+Unified API Fetcher: Ensure Auth.tsx uses the shared apiFetch to maintain consistent headers and error handling.
+
+Optimistic UI: Implement optimistic updates for common actions like checking off shopping list items to make the application feel more responsive.
