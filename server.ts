@@ -311,6 +311,10 @@ async function startServer() {
          return res.status(403).json({ error: "Not authorized to modify this group" });
       }
 
+      if (group.members.includes(memberEmail)) {
+        return res.status(400).json({ error: "Member already in group" });
+      }
+
       group.members.push(memberEmail);
       await group.save();
       
@@ -318,6 +322,30 @@ async function startServer() {
     } catch (error) {
       console.error("Failed to add member:", error);
       res.status(500).json({ error: "Failed to add member" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId/members/:email", authenticateToken, async (req: any, res) => {
+    try {
+      const emailToRemove = req.params.email;
+      const groupId = req.params.groupId;
+
+      const group = await Group.findById(groupId);
+      if (!group || !group.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Not authorized to modify this group" });
+      }
+
+      group.members = group.members.filter(m => m !== emailToRemove);
+      
+      if (group.members.length === 0) {
+        return res.status(400).json({ error: "Group must have at least one member" });
+      }
+
+      await group.save();
+      res.json({ ...group.toObject(), id: group._id.toString() });
+    } catch (error) {
+      console.error("Failed to remove member:", error);
+      res.status(500).json({ error: "Failed to remove member" });
     }
   });
 

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Utensils, ShoppingCart, Users, ChevronRight, Menu, X, Plus, LogOut, Wand2, Share2, CheckCircle2 } from 'lucide-react';
+import { LayoutDashboard, Utensils, ShoppingCart, Users, ChevronRight, Menu, X, Plus, LogOut, Wand2, Share2, CheckCircle2, Trash2 } from 'lucide-react';
 import WeeklyPlanner from './components/WeeklyPlanner';
 import DishRepository from './components/DishRepository';
 import ShoppingList from './components/ShoppingList';
@@ -259,7 +259,14 @@ export default function App() {
 
           <div className="mt-auto p-4 bg-slate-50 rounded-3xl border border-slate-200">
           <div className="mb-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Space Members</p>
+            <p>
+                          <button 
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1 hover:text-emerald-600 transition-colors"
+              >
+                Space Members
+              </button>
+              </p>
             <div className="flex flex-wrap items-center -space-x-2">
               {activeGroup?.members?.map((m: string, i: number) => (
                 <div key={i} className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-slate-50 flex items-center justify-center text-[10px] font-bold text-emerald-700 relative group overflow-hidden" title={m}>
@@ -278,7 +285,7 @@ export default function App() {
           <div className="flex items-center gap-3 mb-3 pt-3 border-t border-slate-200">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Space</p>
-              <p className="text-sm font-bold text-slate-800 truncate">{activeGroup?.name}</p>
+              <p className="text-sm font-bold text-slate-800 transition-colors text-left w-full">{activeGroup?.name}</p>
             </div>
           </div>
           <button 
@@ -318,8 +325,46 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl p-6"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Invite Member</h2>
-              <p className="text-sm text-slate-500 mb-6 px-1">Add someone to <strong>{activeGroup?.name}</strong> to share meals effortlessly.</p>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Group Settings</h2>
+              <p className="text-sm text-slate-500 mb-6 px-1">Manage members and settings for <strong>{activeGroup?.name}</strong>.</p>
+              
+              <div className="mb-6">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Current Members</p>
+                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                  {activeGroup?.members?.map((memberEmail: string) => (
+                    <div key={memberEmail} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 group/member">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-700 shrink-0">
+                          {memberEmail.slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-bold text-slate-700 truncate" title={memberEmail}>{memberEmail}</span>
+                      </div>
+                      {memberEmail !== user.email && (
+                        <button 
+                          onClick={async () => {
+                            if (!window.confirm(`Are you sure you want to remove ${memberEmail}?`)) return;
+                            try {
+                              const res = await apiFetch(`/api/groups/${activeGroup.id}/members/${memberEmail}`, {
+                                method: 'DELETE'
+                              });
+                              if (res.ok) {
+                                const updated = await res.json();
+                                setGroups(groups.map(g => g.id === updated.id ? updated : g));
+                                setActiveGroup(updated);
+                              }
+                            } catch (error) {
+                              console.error("Failed to remove member", error);
+                            }
+                          }}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
               
               {inviteSuccess ? (
                 <motion.div 
@@ -507,6 +552,15 @@ export default function App() {
                 <div className="p-4 bg-slate-50 rounded-3xl border border-slate-200">
                   <div className="mb-4">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Space Members</p>
+                      <button 
+                        onClick={() => {
+                          setIsInviteModalOpen(true);
+                          setIsSidebarOpen(false);
+                        }}
+                        className="text-sm font-bold text-slate-800 truncate hover:text-emerald-600 transition-colors text-left w-full"
+                      >
+                        {activeGroup?.name}
+                      </button>
                     <div className="flex flex-wrap items-center gap-2">
                       {activeGroup?.members?.map((m: string, i: number) => (
                         <div key={i} className="w-9 h-9 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-emerald-700 shadow-sm" title={m}>
@@ -528,7 +582,15 @@ export default function App() {
                   <div className="pt-4 border-t border-slate-200 space-y-3">
                     <div className="px-1">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Space</p>
-                      <p className="text-sm font-bold text-slate-800 truncate">{activeGroup?.name}</p>
+                      <button 
+                        onClick={() => {
+                          setIsInviteModalOpen(true);
+                          setIsSidebarOpen(false);
+                        }}
+                        className="text-sm font-bold text-slate-800 truncate hover:text-emerald-600 transition-colors text-left w-full"
+                      >
+                        {activeGroup?.name}
+                      </button>
                     </div>
                     <button 
                       onClick={() => {

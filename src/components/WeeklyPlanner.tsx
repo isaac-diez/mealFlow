@@ -256,16 +256,16 @@ export default function WeeklyPlanner({
         ref={scrollContainerRef}
         className="overflow-x-auto pb-4 -mx-4 px-4 no-scrollbar"
       >
-        <div className="flex gap-4 min-w-[1000px]">
+        <div className="flex gap-1 min-w-[1000px]">
           {DAYS.map(day => (
             <motion.div 
               key={day}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex-1 min-w-[180px] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
+              className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
             >
               <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                <h3 className={`font-bold text-sm capitalize ${day === 'sunday' ? 'text-rose-500' : 'text-slate-500'}`}>{day.slice(0, 3)}</h3>
+                <h3 className={`font-bold text-sm capitalize ${day === 'sunday' || day === 'saturday' ? 'text-rose-500' : 'text-slate-500'}`}>{day.slice(0, 3)}</h3>
               </div>
               <div className="p-3 space-y-3 flex-1">
                 <div className="space-y-1">
