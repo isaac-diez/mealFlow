@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MealFlow</title>
+    <script>
+      // Aggressive suppression of Vite HMR and WebSocket errors in this restricted environment
+      (function() {
+        const suppressStrings = ['[vite]', 'WebSocket', 'HMR', 'failed to connect'];
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalLog = console.log;
+
+        const shouldSuppress = (args) => {
+          const msg = args.join(' ');
+          return suppressStrings.some(s => msg.includes(s));
+        };
+
+        console.error = (...args) => {
+          if (shouldSuppress(args)) return;
+          originalError.apply(console, args);
+        };
+        console.warn = (...args) => {
+          if (shouldSuppress(args)) return;
+          originalWarn.apply(console, args);
+        };
+        console.log = (...args) => {
+          if (shouldSuppress(args)) return;
+          originalLog.apply(console, args);
+        };
+
+        window.addEventListener('unhandledrejection', (event) => {
+          if (event.reason && (
+            (event.reason.message && shouldSuppress([event.reason.message])) ||
+            (shouldSuppress([String(event.reason)]))
+          )) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
