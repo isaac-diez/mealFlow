@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Dish, WeeklyPlan } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_APIKEY || process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export const generateWeeklyMenu = async (
   dishes: Dish[],
@@ -28,7 +28,7 @@ export const generateWeeklyMenu = async (
   `;
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
