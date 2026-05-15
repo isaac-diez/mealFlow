@@ -241,17 +241,18 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                 <div className="grid grid-cols-2 gap-4">
                    <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Category</label>
-                    <select 
-                      value={newDish.category || 'Main Course'}
+                    <input 
+                      list="dish-categories"
+                      value={newDish.category || ''}
                       onChange={(e) => setNewDish({ ...newDish, category: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-emerald-500/5 transition-all text-sm appearance-none"
-                    >
-                      <option>Pasta</option>
-                      <option>Salads</option>
-                      <option>Soups</option>
-                      <option>Asian</option>
-                      <option>Main Course</option>
-                    </select>
+                      placeholder="Select or type category"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-emerald-500/5 transition-all text-sm"
+                    />
+                    <datalist id="dish-categories">
+                      {Array.from(new Set([...dishes.map(d => d.category), 'Pasta', 'Salads', 'Soups', 'Asian', 'Main Course'])).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Prep Time (min)</label>
@@ -325,19 +326,19 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                         />
                     </div>
                     <div className="flex gap-2 items-center border-t border-slate-100 pt-2 px-2 pb-1">
-                      <select 
-                        value={newIngredient.category || 'Other'}
-                        onChange={(e) => setNewIngredient({ ...newIngredient, category: e.target.value })}
-                        className="flex-1 bg-transparent text-xs font-bold text-slate-500 focus:outline-none"
-                      >
-                        <option>Vegetables</option>
-                        <option>Proteins</option>
-                        <option>Dairy/Eggs</option>
-                        <option>Pantry</option>
-                        <option>Fruits</option>
-                        <option>Bakery</option>
-                        <option>Other</option>
-                      </select>
+                    <input 
+                      list="ingredient-categories"
+                      value={newIngredient.category || ''}
+                      onChange={(e) => setNewIngredient({ ...newIngredient, category: e.target.value })}
+                      placeholder="Select or type ingredient"
+                      className="flex-1 bg-transparent text-xs font-bold text-slate-500 focus:outline-none"
+                    />
+                    <datalist id="ingredient-categories">
+                      {Array.from(new Set([...dishes.map(d => d.ingredients?.map(i => i.category)).flat(), 'Vegetables', 'Proteins', 'Dairy/Eggs', 'Pantry', 'Fruits', 'Bakery', 'Other'])).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </datalist>
+
                       <button 
                         onClick={() => {
                           if (newIngredient.name) {
