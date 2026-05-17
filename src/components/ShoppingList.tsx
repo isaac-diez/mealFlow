@@ -94,19 +94,26 @@ export default function ShoppingList({ groupId, plan, dishes }: ShoppingListProp
     }
   };
 
-  const togglePurchased = async (item: ToBuyItem) => {
+const togglePurchased = async (item: ToBuyItem) => {
     try {
-      // Optimistic update
-      setToBuyList(prev => prev.map(i => i.id === item.id ? { ...i, purchased: !i.purchased } : i));
+      // 1. Optimistic update for the UI
+      const newPurchasedStatus = !item.purchased;
+      setToBuyList(prev => prev.map(i => i.id === item.id ? { ...i, purchased: newPurchasedStatus } : i));
       
+      // 2. The API Call
       const res = await apiFetch(`/api/shopping-list/${item.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purchased: !item.purchased })
+        body: JSON.stringify({ 
+          ...item,                    // FIX: Spread the entire item (name, quantity, category)
+          purchased: newPurchasedStatus // Override with the new status
+        })
       });
       
       if (!res.ok) {
         // Revert on failure
+        const errorData = await res.json();
+        console.error("Server validation failed:", errorData);
         setToBuyList(prev => prev.map(i => i.id === item.id ? { ...i, purchased: item.purchased } : i));
       }
     } catch (error) {
