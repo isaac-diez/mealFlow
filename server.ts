@@ -85,7 +85,7 @@ async function connectDb() {
   
   if (mongoose.connection.readyState === 0) {
     console.log("Connecting Mongoose to MongoDB...");
-    await mongoose.connect(MONGODB_URI, { dbName: "mealflow" });
+    await mongoose.connect(MONGODB_URI, { dbName: "mealflow_dev" });
   }
 }
 
@@ -232,11 +232,15 @@ async function startServer() {
       delete updateData.id;
       delete updateData.groupId; 
 
-      const result = await Dish.findByIdAndUpdate(dishId, { $set: updateData }, { new: true });
+      const result = await Dish.findByIdAndUpdate(dishId, { $set: updateData }, { returnDocument: 'after' });
       if (!result) return res.status(404).json({ error: "Dish not found" });
 
       res.json({ ...result.toObject(), id: result._id.toString() });
     } catch (error: any) {
+      if (error.name === "ZodError") {
+        console.log("Validation Failed:", error.errors); // THIS is the gold mine
+        return res.status(400).json({ error: "Validation failed", details: error.errors });
+      }
       console.error("Failed to update dish:", error);
       res.status(500).json({ error: "Failed to update dish", details: error.message || error.toString() });
     }
