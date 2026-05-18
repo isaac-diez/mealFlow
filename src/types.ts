@@ -29,6 +29,8 @@ export interface Dish {
   prepTime: number; // in minutes
   suitableForLunch: boolean;
   suitableForDinner: boolean;
+  isRegular: boolean;
+
 }
 
 export interface MealSlot {
