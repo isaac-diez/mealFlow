@@ -440,12 +440,18 @@ const handleDragEnd = async (event: DragEndEvent) => {
     }
     setLoading(true);
     try {
+      const regularDishes = dishes.filter(d => d.isRegular !== false);
+      if (regularDishes.length < 5) {
+        alert("Please have at least 5 regular dishes in your repository for AI generation!");
+        setLoading(false);
+        return;
+      }
       const prevWeekDate = new Date(currentWeek);
       prevWeekDate.setDate(prevWeekDate.getDate() - 7);
       const prevWeekId = getWeekId(prevWeekDate);
       const previousPlan = plans.find(p => p.weekId === prevWeekId) || null;
 
-      const generatedDays = await generateWeeklyMenu(dishes, previousPlan);
+      const generatedDays = await generateWeeklyMenu(regularDishes, previousPlan);
       
       const newPlan: Omit<WeeklyPlan, 'id'> = {
         groupId,
@@ -496,8 +502,9 @@ const handleDragEnd = async (event: DragEndEvent) => {
   };
 
   const filteredRepoDishes = dishes.filter(d => 
-    d.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
-    d.category.toLowerCase().includes(repoSearch.toLowerCase())
+    (d.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
+    d.category.toLowerCase().includes(repoSearch.toLowerCase())) &&
+    d.isRegular !== false
   );
 
   return (
@@ -701,6 +708,7 @@ const handleDragEnd = async (event: DragEndEvent) => {
                     <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-rose-500" />
                   </button>
                   {dishes
+                    .filter(d => d.isRegular !== false)
                     .map(dish => {
                       const slotData = currentPlan?.days[selectingSlot.day as keyof WeeklyPlan['days']][selectingSlot.slot];
                       const dishIds = slotData?.dishIds || [];
