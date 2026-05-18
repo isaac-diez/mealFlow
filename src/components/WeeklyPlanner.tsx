@@ -123,7 +123,7 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-slate-800 leading-tight truncate">
+          <p className="text-xs font-bold text-slate-800 leading-tight">
             {dish.name}
           </p>
           <p className={`text-[9px] font-bold uppercase ${slot === 'lunch' ? 'text-emerald-600' : 'text-indigo-600'}`}>
@@ -176,7 +176,7 @@ const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false })
       // Remove 'transition-all' from the template literal below
       className={`p-3 bg-white border border-slate-200 rounded-2xl shadow-sm ${disabled ? 'opacity-80' : 'cursor-grab active:cursor-grabbing hover:border-emerald-500'}`}
     >
-      <p className="text-xs font-bold text-slate-800 truncate">{dish.name}</p>
+      <p className="text-xs font-bold text-slate-800">{dish.name}</p>
       <p className="text-[10px] text-slate-400 font-bold uppercase">{dish.category}</p>
     </div>
   );
