@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Wand2, Share2, ShoppingBag, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wand2, Share2, ShoppingBag, Plus, Trash2, CheckCircle2, GripVertical, X } from 'lucide-react';
 import { Dish, WeeklyPlan, DayPlan } from '../types';
 import { generateWeeklyMenu } from '../services/aiService';
 import { apiFetch } from '../lib/api';
+import { 
+  DndContext, 
+  useDraggable, 
+  useDroppable, 
+  PointerSensor, 
+  useSensor, 
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+  DragEndEvent,
+  DragStartEvent
+} from '@dnd-kit/core';
 
 interface WeeklyPlannerProps {
   groupId: string;
@@ -15,6 +27,160 @@ interface WeeklyPlannerProps {
 }
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+interface DroppableSlotProps {
+  day: string;
+  slot: 'lunch' | 'dinner';
+  dishIds: string[];
+  dishes: Dish[];
+  onClick: () => void;
+  onRemove: (dishId: string) => void;
+  isDragEnabled: boolean;
+}
+
+// Droppable Slot Component
+const DroppableSlot: React.FC<DroppableSlotProps> = ({ 
+  day, 
+  slot, 
+  dishIds, 
+  dishes, 
+  onClick,
+  onRemove,
+  isDragEnabled
+}) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `${day}-${slot}`,
+    data: { day, slot }
+  });
+
+  return (
+    <div className="space-y-1">
+      <span className={`text-[10px] font-bold uppercase tracking-widest px-2 ${slot === 'lunch' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+        {slot}
+      </span>
+      <div 
+        ref={setNodeRef}
+        onClick={onClick}
+        className={`min-h-[110px] rounded-2xl p-3 flex flex-col items-start justify-start cursor-pointer transition-all border-2 ${
+          isOver 
+            ? 'border-emerald-500 bg-emerald-50/50 scale-[1.02] shadow-lg ring-4 ring-emerald-500/10' 
+            : dishIds.length 
+              ? (slot === 'lunch' ? 'bg-emerald-50 border-emerald-100 hover:ring-2 hover:ring-emerald-500/30' : 'bg-indigo-50 border-indigo-100 hover:ring-2 hover:ring-indigo-500/30')
+              : 'border-dashed border-slate-100 flex items-center justify-center hover:border-slate-300'
+        }`}
+      >
+        {dishIds.map((id: string) => {
+          const dish = dishes.find(d => (d.id === id || (d as any)._id === id));
+          if (!dish) return null;
+          return <DraggableDishItem key={`${day}-${slot}-${id}`} dish={dish} slot={slot} day={day} onRemove={onRemove} disabled={!isDragEnabled} />;
+        })}
+        {!dishIds.length && (
+          <span className="text-lg text-slate-200">+</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface DraggableDishItemProps {
+  dish: Dish;
+  slot: 'lunch' | 'dinner';
+  day: string;
+  onRemove: (id: string) => void;
+  disabled?: boolean;
+}
+
+// Draggable Dish Item (Inside Planner)
+const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, onRemove, disabled = false }) => {
+  const id = dish.id || (dish as any)._id;
+  
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    // Use a stable ID so dnd-kit can track it reliably
+    id: `planner-${id}-${day}-${slot}`, 
+    data: { dishId: id, source: 'planner', sourceDay: day, sourceSlot: slot },
+    disabled
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    zIndex: isDragging ? 50 : undefined
+  } : undefined;
+
+  if (isDragging) {
+    return <div ref={setNodeRef} className="opacity-30 bg-slate-100 rounded-xl w-full h-12 mb-2" />;
+  }
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={`mb-2 last:mb-0 w-full p-2 bg-white rounded-xl shadow-sm border border-slate-100 group relative ${slot === 'lunch' ? 'hover:border-emerald-200' : 'hover:border-indigo-200'}`}
+    >
+      <div className="flex items-center gap-2">
+        {!disabled && (
+          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-slate-300 hover:text-slate-400">
+            <GripVertical className="w-3.5 h-3.5" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-slate-800 leading-tight truncate">
+            {dish.name}
+          </p>
+          <p className={`text-[9px] font-bold uppercase ${slot === 'lunch' ? 'text-emerald-600' : 'text-indigo-600'}`}>
+            {dish.category}
+          </p>
+        </div>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(id);
+          }}
+          className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-500 transition-all"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+interface DraggableDishProps {
+  dish: Dish;
+  disabled?: boolean;
+}
+
+// Draggable Dish Component (From Repository)
+const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false }) => {
+  const id = dish.id || (dish as any)._id;
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `repo-${id}`,
+    data: { dishId: id, source: 'repository' },
+    disabled
+  });
+
+  // 1. Only apply transform while dragging. 
+  // 2. IMPORTANT: We use 'none' when not dragging to prevent the transition engine from "sliding" it back.
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition: isDragging ? 'none' : undefined, // Kill transitions during drag/drop
+    zIndex: isDragging ? 999 : undefined,
+    opacity: isDragging ? 0 : undefined, // Make the source item invisible while dragging
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      {...(!disabled ? attributes : {})}
+      {...(!disabled ? listeners : {})}
+      // Remove 'transition-all' from the template literal below
+      className={`p-3 bg-white border border-slate-200 rounded-2xl shadow-sm ${disabled ? 'opacity-80' : 'cursor-grab active:cursor-grabbing hover:border-emerald-500'}`}
+    >
+      <p className="text-xs font-bold text-slate-800 truncate">{dish.name}</p>
+      <p className="text-[10px] text-slate-400 font-bold uppercase">{dish.category}</p>
+    </div>
+  );
+};
 
 export default function WeeklyPlanner({ 
   groupId, 
@@ -28,6 +194,20 @@ export default function WeeklyPlanner({
   const [loading, setLoading] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [selectingSlot, setSelectingSlot] = useState<{ day: string; slot: 'lunch' | 'dinner' } | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isDragEnabled, setIsDragEnabled] = useState(false);
+  const [repoSearch, setRepoSearch] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const isDropping = useRef(false);
 
   useEffect(() => {
     if (onLoadingChange) onLoadingChange(loading);
@@ -37,7 +217,7 @@ export default function WeeklyPlanner({
     const handleTrigger = () => handleAiGenerate();
     window.addEventListener('trigger-ai-generate', handleTrigger);
     return () => window.removeEventListener('trigger-ai-generate', handleTrigger);
-  }, [dishes, plans, currentWeek]); // Dependencies for generation
+  }, [dishes, plans, currentWeek]);
 
   const getWeekId = (date: Date) => {
     const d = new Date(date);
@@ -71,7 +251,9 @@ export default function WeeklyPlanner({
 
   const ensurePlanExists = async (): Promise<WeeklyPlan | null> => {
     if (!groupId) return null;
-    if (currentPlan) return currentPlan;
+    const existing = plans.find(p => p.weekId === currentWeekId);
+    if (existing) return existing;
+
     const blankDays = DAYS.reduce((acc, day) => {
       acc[day] = { lunch: { dishIds: [] }, dinner: { dishIds: [] } };
       return acc;
@@ -95,6 +277,90 @@ export default function WeeklyPlanner({
     if (!groupId) return;
     await ensurePlanExists();
     setSelectingSlot({ day, slot });
+  };
+
+  const [wasSuccessfulDrop, setWasSuccessfulDrop] = useState(false);
+
+  const handleDragStart = (event: DragStartEvent) => {
+  isDropping.current = false; // Reset
+  setActiveDragId(event.active.id as string);
+  };
+
+const handleDragEnd = async (event: DragEndEvent) => {
+  const { over, active } = event;
+  
+  if (over && over.data.current) {
+    isDropping.current = true; // Mark as successful drop immediately
+  }
+
+  // 2. We have a valid drop
+  setWasSuccessfulDrop(true);
+
+  const { day: targetDay, slot: targetSlot } = over.data.current as { day: string, slot: 'lunch' | 'dinner' };
+  const { dishId, source, sourceDay, sourceSlot } = active.data.current as any;
+  
+  if (!dishId) return;
+
+  const activePlan = plans.find(p => p.weekId === currentWeekId);
+  if (!activePlan) return;
+
+  if (source === 'planner' && sourceDay === targetDay && sourceSlot === targetSlot) return;
+
+  // 3. Prepare the update
+  let newDays = JSON.parse(JSON.stringify(activePlan.days));
+
+  if (source === 'planner') {
+    const oldSlot = newDays[sourceDay][sourceSlot];
+    oldSlot.dishIds = oldSlot.dishIds.filter((id: string) => id !== dishId);
+  }
+
+  const targetSlotData = newDays[targetDay][targetSlot];
+  if (!targetSlotData.dishIds.includes(dishId)) {
+    targetSlotData.dishIds.push(dishId);
+  }
+
+  const updatedPlan = { ...activePlan, days: newDays };
+  
+  // 4. Update UI
+  setPlans(prev => prev.map(p => p.weekId === currentWeekId ? updatedPlan : p));
+  setActiveDragId(null);
+  // 5. Persist (Now variables are in scope)
+  try {
+    await apiFetch(`/api/plans/${activePlan.id || (activePlan as any)._id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedPlan)
+    });
+  } catch (err) {
+    console.error("Failed to save dragged plan", err);
+    fetchPlans(); 
+  }
+};
+
+  const handleRemoveDish = async (day: string, slot: 'lunch' | 'dinner', dishId: string) => {
+    if (!currentPlan) return;
+
+    const currentSlot = currentPlan.days[day as keyof WeeklyPlan['days']][slot];
+    const updatedDishIds = (currentSlot.dishIds || []).filter(id => id !== dishId);
+
+    const updatedPlan: WeeklyPlan = {
+      ...currentPlan,
+      days: {
+        ...currentPlan.days,
+        [day]: {
+          ...currentPlan.days[day as keyof WeeklyPlan['days']],
+          [slot]: { dishIds: updatedDishIds }
+        }
+      }
+    };
+
+    setPlans(prev => prev.map(p => p.id === updatedPlan.id ? updatedPlan : p));
+
+    await apiFetch(`/api/plans/${currentPlan.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedPlan)
+    });
   };
 
   const handleSelectDish = async (dishId: string) => {
@@ -229,191 +495,262 @@ export default function WeeklyPlanner({
     }
   };
 
+  const filteredRepoDishes = dishes.filter(d => 
+    d.name.toLowerCase().includes(repoSearch.toLowerCase()) ||
+    d.category.toLowerCase().includes(repoSearch.toLowerCase())
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-center bg-white p-4 rounded-3xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-4 bg-slate-50/50 p-1.5 rounded-2xl border border-slate-100 shadow-inner">
-          <button 
-            onClick={() => handleWeekChange(-1)}
-            className="p-2 hover:bg-white rounded-xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="text-center min-w-[140px]">
-            <h2 className="font-bold text-slate-800 text-sm">Week {currentWeekId.split('-W')[1]}</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{currentWeekId.split('-W')[0]}</p>
-          </div>
-          <button 
-            onClick={() => handleWeekChange(1)}
-            className="p-2 hover:bg-white rounded-xl text-slate-400 hover:text-emerald-600 transition-all shadow-sm"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      <div 
-        ref={scrollContainerRef}
-        className="overflow-x-auto pb-4 -mx-4 px-4 no-scrollbar"
-      >
-        <div className="flex gap-1 min-w-[1000px]">
-          {DAYS.map(day => (
-            <motion.div 
-              key={day}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
+    <DndContext 
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-6 relative">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+            <button 
+              onClick={() => handleWeekChange(-1)}
+              className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-emerald-600 transition-all"
             >
-              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                <h3 className={`font-bold text-sm capitalize ${day === 'sunday' || day === 'saturday' ? 'text-rose-500' : 'text-slate-500'}`}>{day.slice(0, 3)}</h3>
-              </div>
-              <div className="p-3 space-y-3 flex-1">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest px-2">Lunch</span>
-                  <div 
-                    onClick={() => handleSlotClick(day, 'lunch')}
-                    className={`min-h-[90px] rounded-2xl p-3 flex flex-col items-start justify-center cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition-all ${currentPlan?.days[day]?.lunch?.dishIds?.length ? 'bg-emerald-50 border border-emerald-100' : 'border-2 border-dashed border-slate-100 flex items-center justify-center'}`}
-                  >
-                    {currentPlan?.days[day]?.lunch?.dishIds?.map((id: string) => {
-                      const dish = dishes.find(d => (d.id === id || (d as any)._id === id));
-                      return dish ? (
-                        <div key={id} className="mb-2 last:mb-0 w-full">
-                          <p className="text-xs font-bold text-slate-800 leading-tight">
-                            {dish.name}
-                          </p>
-                          <p className="text-[9px] text-emerald-600 font-bold mt-0.5 uppercase">
-                            {dish.category}
-                          </p>
-                        </div>
-                      ) : null;
-                    })}
-                    {!currentPlan?.days[day]?.lunch?.dishIds?.length && (
-                      <span className="text-lg text-slate-200">+</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest px-2">Dinner</span>
-                  <div 
-                    onClick={() => handleSlotClick(day, 'dinner')}
-                    className={`min-h-[90px] rounded-2xl p-3 flex flex-col items-start justify-center cursor-pointer hover:ring-2 hover:ring-indigo-500/50 transition-all ${currentPlan?.days[day]?.dinner?.dishIds?.length ? 'bg-indigo-50 border border-indigo-100' : 'border-2 border-dashed border-slate-100 flex items-center justify-center'}`}
-                  >
-                    {currentPlan?.days[day]?.dinner?.dishIds?.map((id: string) => {
-                      const dish = dishes.find(d => (d.id === id || (d as any)._id === id));
-                      return dish ? (
-                        <div key={id} className="mb-2 last:mb-0 w-full">
-                          <p className="text-xs font-bold text-slate-800 leading-tight">
-                            {dish.name}
-                          </p>
-                          <p className="text-[9px] text-indigo-600 font-bold mt-0.5 uppercase">
-                            {dish.category}
-                          </p>
-                        </div>
-                      ) : null;
-                    })}
-                    {!currentPlan?.days[day]?.dinner?.dishIds?.length && (
-                      <span className="text-lg text-slate-200">+</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {!currentPlan && !loading && (
-        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm">
-          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
-            <Wand2 className="w-8 h-8 text-slate-200" />
-          </div>
-          <p className="text-slate-400 font-bold">No plan for this week yet.</p>
-          <button 
-            onClick={handleAiGenerate}
-            className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 hover:bg-black transition-all active:scale-95"
-          >
-            Auto-Generate with AI
-          </button>
-        </div>
-      )}
-      {/* Dish Selection Modal */}
-      <AnimatePresence>
-        {selectingSlot && (
-          <motion.div 
-            key="dish-select-modal"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectingSlot(null)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 flex flex-col max-h-[80vh]"
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div className="text-center min-w-[120px]">
+              <h2 className="font-bold text-slate-800 text-sm">Week {currentWeekId.split('-W')[1]}</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{currentWeekId.split('-W')[0]}</p>
+            </div>
+            <button 
+              onClick={() => handleWeekChange(1)}
+              className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-emerald-600 transition-all"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Select Dish</h2>
-              <p className="text-sm font-medium text-slate-500 mb-4 capitalize">
-                {selectingSlot.day} - {selectingSlot.slot}
-              </p>
-              
-              <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2 mb-4">
-                <button
-                  onClick={handleClearSlot}
-                  className="w-full text-left p-4 rounded-2xl border border-slate-200 hover:border-rose-500 hover:bg-rose-50 transition-all group flex items-center justify-between"
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button 
+              onClick={() => setIsLibraryOpen(!isLibraryOpen)}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all border ${isLibraryOpen ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-600 hover:text-emerald-600'}`}
+            >
+              <div className={`w-4 h-4 flex items-center justify-center rounded ${isLibraryOpen ? 'bg-emerald-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                <Plus className="w-3 h-3" />
+              </div>
+              Library
+            </button>
+            <button 
+              onClick={() => setIsDragEnabled(!isDragEnabled)}
+              title={isDragEnabled ? "Disable Drag and Drop" : "Enable Drag and Drop"}
+              className={`p-2 rounded-xl transition-all duration-200 border flex items-center justify-center ${
+                isDragEnabled 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm shadow-emerald-100' 
+                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+              }`}
+            >
+              <div className="relative flex items-center justify-center h-5 w-5">
+                <svg 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  className="w-4 h-4"
                 >
-                  <span className="font-bold text-slate-700 group-hover:text-rose-600">Clear Slot</span>
-                  <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-rose-500" />
-                </button>
-                {dishes
-                  .filter(d => selectingSlot.slot === 'lunch' ? d.suitableForLunch : d.suitableForDinner)
-                  .map(dish => {
-                    const slotData = currentPlan?.days[selectingSlot.day as keyof WeeklyPlan['days']][selectingSlot.slot];
-                    const dishIds = slotData?.dishIds || [];
-                    const isSelected = dishIds.includes(dish.id);
-                    return (
-                      <button
-                        key={dish.id}
-                        onClick={() => handleSelectDish(dish.id)}
-                        className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50'}`}
-                      >
-                        <div>
-                          <p className={`font-bold text-sm ${isSelected ? 'text-emerald-700' : 'text-slate-800'}`}>{dish.name}</p>
-                          <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-600 mt-1">{dish.category}</p>
-                        </div>
-                        {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                      </button>
-                    );
-                  })}
-                {dishes.length === 0 && (
-                  <div className="p-6 text-center text-slate-400 font-medium bg-slate-50 rounded-2xl">
-                    No dishes available. Add some in your repository first.
-                  </div>
+                  <rect x="3" y="5" width="5" height="5" rx="1" />
+                  <rect x="3" y="14" width="5" height="5" rx="1" />
+                  <path d="M12 12h7m-3-3 3 3-3 3" />
+                </svg>
+                {isDragEnabled && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white" />
                 )}
               </div>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setSelectingSlot(null)}
-                  className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-colors"
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-6 items-start">
+          <div 
+            ref={scrollContainerRef}
+            className="flex-1 overflow-x-auto pb-4 -mx-4 px-4 no-scrollbar"
+          >
+            <div className="flex gap-4 min-w-[1000px]">
+              {DAYS.map(day => (
+                <motion.div 
+                  key={day}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex-1 min-w-[190px] bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
                 >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleSavePlan}
-                  className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+                  <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className={`font-bold text-sm capitalize ${day === 'sunday' ? 'text-rose-500' : 'text-slate-500'}`}>{day.slice(0, 3)}</h3>
+                  </div>
+                  <div className="p-3 space-y-4 flex-1">
+                    <DroppableSlot 
+                      day={day} 
+                      slot="lunch" 
+                      dishIds={currentPlan?.days[day]?.lunch?.dishIds || []} 
+                      dishes={dishes}
+                      onClick={() => handleSlotClick(day, 'lunch')}
+                      onRemove={(dishId) => handleRemoveDish(day, 'lunch', dishId)}
+                      isDragEnabled={isDragEnabled}
+                    />
+                    <DroppableSlot 
+                      day={day} 
+                      slot="dinner" 
+                      dishIds={currentPlan?.days[day]?.dinner?.dishIds || []} 
+                      dishes={dishes}
+                      onClick={() => handleSlotClick(day, 'dinner')}
+                      onRemove={(dishId) => handleRemoveDish(day, 'dinner', dishId)}
+                      isDragEnabled={isDragEnabled}
+                    />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {isLibraryOpen && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20, width: 0 }}
+                animate={{ opacity: 1, x: 0, width: 280 }}
+                exit={{ opacity: 0, x: 20, width: 0 }}
+                className="hidden lg:flex flex-col bg-slate-50 rounded-[2.5rem] border border-slate-200 shadow-inner overflow-hidden p-4 h-[600px] sticky top-4"
+              >
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-4 px-2">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
+                    <div className="flex items-center gap-2">
+                      {isDragEnabled && (
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
+                      )}
+                      <button onClick={() => setIsLibraryOpen(false)} className="p-1 hover:bg-white rounded-lg text-slate-400">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="Search library..."
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    className="w-full px-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                  {filteredRepoDishes.map(dish => (
+                    <DraggableDish key={`lib-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
+                  ))}
+                  {filteredRepoDishes.length === 0 && (
+                    <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                      No dishes found...
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {!currentPlan && !loading && (
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
+              <Wand2 className="w-8 h-8 text-slate-200" />
+            </div>
+            <p className="text-slate-400 font-bold">No plan for this week yet.</p>
+            <button 
+              onClick={handleAiGenerate}
+              className="mt-6 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 hover:bg-black transition-all active:scale-95"
+            >
+              Auto-Generate with AI
+            </button>
+          </div>
         )}
-      </AnimatePresence>
+        
+        {/* Dish Selection Modal */}
+        <AnimatePresence>
+          {selectingSlot && (
+            <motion.div 
+              key="dish-select-modal"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setSelectingSlot(null)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl p-6 flex flex-col max-h-[80vh]"
+              >
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Select Dish</h2>
+                <p className="text-sm font-medium text-slate-500 mb-4 capitalize">
+                  {selectingSlot.day} - {selectingSlot.slot}
+                </p>
+                
+                <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2 mb-4">
+                  <button
+                    onClick={handleClearSlot}
+                    className="w-full text-left p-4 rounded-2xl border border-slate-200 hover:border-rose-500 hover:bg-rose-50 transition-all group flex items-center justify-between"
+                  >
+                    <span className="font-bold text-slate-700 group-hover:text-rose-600">Clear Slot</span>
+                    <Trash2 className="w-4 h-4 text-slate-400 group-hover:text-rose-500" />
+                  </button>
+                  {dishes
+                    .map(dish => {
+                      const slotData = currentPlan?.days[selectingSlot.day as keyof WeeklyPlan['days']][selectingSlot.slot];
+                      const dishIds = slotData?.dishIds || [];
+                      const isSelected = dishIds.includes(dish.id || (dish as any)._id);
+                      return (
+                        <button
+                          key={dish.id || (dish as any)._id}
+                          onClick={() => handleSelectDish(dish.id || (dish as any)._id)}
+                          className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between ${isSelected ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-emerald-500 hover:bg-emerald-50'}`}
+                        >
+                          <div>
+                            <p className={`font-bold text-sm ${isSelected ? 'text-emerald-700' : 'text-slate-800'}`}>{dish.name}</p>
+                            <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-600 mt-1">{dish.category}</p>
+                          </div>
+                          {isSelected && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                        </button>
+                      );
+                    })}
+                </div>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setSelectingSlot(null)}
+                    className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSavePlan}
+                    className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      
+      {/* Drag Overlay for smooth preview */}
+      
+<DragOverlay dropAnimation={null}>
+  {activeDragId && !isDropping.current ? (
+    <div className="p-3 bg-white rounded-xl shadow-2xl border border-emerald-200 ring-2 ring-emerald-500/20 max-w-[180px] cursor-grabbing">
+      <p className="text-xs font-bold text-slate-800 leading-tight">
+        {dishes.find(d => (d.id === activeDragId.replace('repo-', '').replace('planner-', '').split('-')[0]))?.name || 'Dragging...'}
+      </p>
     </div>
+  ) : null}
+</DragOverlay>
+    </DndContext>
   );
 }
