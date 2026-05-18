@@ -13,6 +13,7 @@ const DishSchema = new mongoose.Schema({
   suitableForDinner: { type: Boolean, default: true },
   ingredients: [IngredientSchema],
   prepTime: { type: Number, default: 30 },
+  isRegular: { type: Boolean, default: true },
   groupId: { type: String, required: true }
 });
 
