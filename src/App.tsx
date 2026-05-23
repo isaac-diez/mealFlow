@@ -679,9 +679,9 @@ export default function App() {
           <AnimatePresence mode="wait">
             {!activeGroup ? (
               <motion.div
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center py-20 text-center"
               >
                 <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mb-6">

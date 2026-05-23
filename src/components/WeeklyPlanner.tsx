@@ -8,7 +8,8 @@ import {
   DndContext, 
   useDraggable, 
   useDroppable, 
-  PointerSensor, 
+  MouseSensor, 
+  TouchSensor,
   useSensor, 
   useSensors,
   DragOverlay,
@@ -101,10 +102,11 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
     disabled
   });
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-    zIndex: isDragging ? 50 : undefined
-  } : undefined;
+  const style = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    zIndex: isDragging ? 50 : undefined,
+    touchAction: 'none'
+  };
 
   if (isDragging) {
     return <div ref={setNodeRef} className="opacity-30 bg-slate-100 rounded-xl w-full h-12 mb-2" />;
@@ -118,7 +120,7 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
     >
       <div className="flex items-center gap-2">
         {!disabled && (
-          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-slate-300 hover:text-slate-400">
+          <div {...attributes} {...listeners} style={{ touchAction: 'none' }} className="cursor-grab active:cursor-grabbing p-1 -ml-1 text-slate-300 hover:text-slate-400">
             <GripVertical className="w-3.5 h-3.5" />
           </div>
         )}
@@ -158,13 +160,10 @@ const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false })
     disabled
   });
 
-  // 1. Only apply transform while dragging. 
-  // 2. IMPORTANT: We use 'none' when not dragging to prevent the transition engine from "sliding" it back.
-  const style: React.CSSProperties = {
+  const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    transition: isDragging ? 'none' : undefined, // Kill transitions during drag/drop
-    zIndex: isDragging ? 999 : undefined,
-    opacity: isDragging ? 0 : undefined, // Make the source item invisible while dragging
+    zIndex: isDragging ? 50 : undefined,
+    touchAction: 'none'
   };
 
   return (
@@ -200,9 +199,15 @@ export default function WeeklyPlanner({
   const [repoSearch, setRepoSearch] = useState('');
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 6,
       },
     })
   );
@@ -618,43 +623,97 @@ const handleDragEnd = async (event: DragEndEvent) => {
 
           <AnimatePresence>
             {isLibraryOpen && (
-              <motion.div 
-                initial={{ opacity: 0, x: 20, width: 0 }}
-                animate={{ opacity: 1, x: 0, width: 280 }}
-                exit={{ opacity: 0, x: 20, width: 0 }}
-                className="hidden lg:flex flex-col bg-slate-50 rounded-[2.5rem] border border-slate-200 shadow-inner overflow-hidden p-4 h-[600px] sticky top-4"
-              >
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-4 px-2">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
-                    <div className="flex items-center gap-2">
-                      {isDragEnabled && (
-                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
-                      )}
-                      <button onClick={() => setIsLibraryOpen(false)} className="p-1 hover:bg-white rounded-lg text-slate-400">
-                        <X className="w-4 h-4" />
-                      </button>
+              <>
+                {/* Backdrop for mobile/tablet only */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsLibraryOpen(false)}
+                  className="fixed inset-x-0 bottom-0 top-16 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden"
+                />
+
+                {/* Mobile Side Drawer (Slides in on mobile & tablet) */}
+                <motion.div 
+                  initial={{ x: "100%", opacity: 0.8 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: "100%", opacity: 0.8 }}
+                  transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                  className="fixed top-16 bottom-0 right-0 z-50 w-[290px] sm:w-[320px] max-w-[85vw] flex flex-col bg-slate-50 border-l border-slate-200 shadow-2xl p-4 lg:hidden"
+                >
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-4 px-2">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
+                      <div className="flex items-center gap-2">
+                        {isDragEnabled && (
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
+                        )}
+                        <button onClick={() => setIsLibraryOpen(false)} className="p-1.5 hover:bg-white rounded-lg text-slate-400">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
+                    <input 
+                      type="text" 
+                      placeholder="Search library..."
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      className="w-full px-4 py-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
                   </div>
-                  <input 
-                    type="text" 
-                    placeholder="Search library..."
-                    value={repoSearch}
-                    onChange={(e) => setRepoSearch(e.target.value)}
-                    className="w-full px-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  />
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                  {filteredRepoDishes.map(dish => (
-                    <DraggableDish key={`lib-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
-                  ))}
-                  {filteredRepoDishes.length === 0 && (
-                    <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
-                      No dishes found...
+                  <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1 pb-20">
+                    {filteredRepoDishes.map(dish => (
+                      <DraggableDish key={`lib-mobile-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
+                    ))}
+                    {filteredRepoDishes.length === 0 && (
+                      <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                        No dishes found...
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Desktop Sidebar (Collapses with width animation) */}
+                <motion.div 
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 280 }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="hidden lg:flex flex-col bg-slate-50 rounded-[2.5rem] border border-slate-200 shadow-inner overflow-hidden p-4 h-[600px] sticky top-4 w-[280px]"
+                >
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-4 px-2">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
+                      <div className="flex items-center gap-2">
+                        {isDragEnabled && (
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
+                        )}
+                        <button onClick={() => setIsLibraryOpen(false)} 
+                          className="p-1 hover:bg-white rounded-lg text-slate-400">
+                          <X className="w-4 h-4" 
+                        />
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </motion.div>
+                    <input 
+                      type="text" 
+                      placeholder="Search library..."
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      className="w-full px-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                    {filteredRepoDishes.map(dish => (
+                      <DraggableDish key={`lib-desktop-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
+                    ))}
+                    {filteredRepoDishes.length === 0 && (
+                      <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                        No dishes found...
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
         </div>
