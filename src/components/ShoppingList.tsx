@@ -55,7 +55,10 @@ export default function ShoppingList({ groupId, plan, dishes }: ShoppingListProp
     [day.lunch, day.dinner].forEach(slot => {
       const dishIds = slot.dishIds || [];
       dishIds.forEach(dishId => {
-        const dish = dishes.find(d => (d.id === dishId || (d as any)._id === dishId));
+        const dish = dishes.find(d => 
+          (d.id?.toString() === dishId?.toString()) || 
+          ((d as any)._id?.toString() === dishId?.toString())
+      );
         dish?.ingredients.forEach(ing => {
           const cat = ing.category || 'Other';
           if (!aggregatedIngredients[cat]) aggregatedIngredients[cat] = [];

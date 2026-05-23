@@ -33,7 +33,7 @@ export const generateWeeklyMenu = async (
     
     Constraint:
     1. For each slot (lunch and dinner), provide a LIST of dish IDs. Usually 1 dish, but you can suggest 2 if they complement each other.
-    2. At least 50% of the selected dishes SHOULD be different from the previous week's dishes if possible.
+    2. At least 50% of the selected dishes SHOULD be different from the previous week's dishes if possible. And do not repeat the same dish in the week.
     Previous week dish IDs: ${JSON.stringify(previousDishIds)}
     
     Return the plan as a JSON object where keys are days of the week (lowercase) and values are objects with "lunch" and "dinner" keys, each containing a "dishIds" array of strings.
@@ -73,9 +73,9 @@ export const generateWeeklyMenu = async (
 export const suggestNewDish = async (existingDishes: string[]): Promise<Partial<Dish>> => {
   try {
   const prompt = `
-    Based on these dishes already in our repository: ${existingDishes.join(", ")}, suggest ONE new dish that would complement the menu.
-    The new dish MUST follow these guidelines: healthy and balanced, no heavy sauces and follows the Mediterranean or Atlantic diet (or an occasional simple Mexican dish or Chinese dish).
-    Provide the name, category, prepTime (minutes), and a list of ingredients (with name and quantity).
+    Based on these dishes in our repository: ${existingDishes.join(", ")}, suggest ONE new dish that would complement the menu.
+    The new dish MUST follow these guidelines: healthy and balanced, no heavy sauces and follows the Mediterranean or Atlantic diet (or something more exotic like an occasional simple Mexican dish or Chinese dish, for example).
+    Provide the name, category, prepTime (minutes), and a list of ingredients with category ("Aceites y Grasas", "Bebidas","Carnes","Cereales y Granos","Dulces y Endulzantes","Especias y Hierbas""Condimentos","Frutas","Frutos Secos","Lácteos","Legumbres","Pescados y Mariscos","Verduras"), name, quantity.
   `;
 
   console.log(prompt);
@@ -118,9 +118,8 @@ export const enrichDishData = async (dish: Dish): Promise<Partial<Dish>> => {
     const prompt = `
         The following dish has missing data. 
         1. If the dish category is "null" or missing, suggest a category (e.g., "Pasta", "Asian", "Salad").
-        2. For every ingredient, assign a category (e.g., "Verduras", "Carne", "Embutidos", "Lácteos").
+        2. For every ingredient, assign on of the following categories: "Aceites y Grasas", "Bebidas","Carnes","Cereales y Granos","Dulces y Endulzantes","Especias y Hierbas""Condimentos","Frutas","Frutos Secos","Lácteos","Legumbres","Pescados y Mariscos","Verduras".
         3. If the dish is suitable for lunch or dinner is missing, determine that as well based on the dish name, ingredients and digestibility.
-        
         Dish: ${JSON.stringify(dish)}
       `;
 
