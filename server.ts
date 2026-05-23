@@ -85,7 +85,7 @@ async function connectDb() {
   
   if (mongoose.connection.readyState === 0) {
     console.log("Connecting Mongoose to MongoDB...");
-    await mongoose.connect(MONGODB_URI, { dbName: "mealflow_dev" });
+    await mongoose.connect(MONGODB_URI, { dbName: "mealflow" });
   }
 }
 
