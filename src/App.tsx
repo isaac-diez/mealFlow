@@ -227,7 +227,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:flex w-72 flex-col bg-white border-r border-slate-200 p-8">
+      <aside className="hidden lg:flex w-72 flex-col bg-white border-r border-slate-200 p-8 sticky top-0 h-screen">
         <div className="flex items-center gap-3 mb-12">
           <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-200">
             <Utensils className="w-5 h-5 text-white" />
