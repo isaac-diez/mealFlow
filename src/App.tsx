@@ -724,7 +724,7 @@ export default function App() {
                   />
                 )}
                 {activeTab === 'shopping' && (
-                  <ShoppingList groupId={activeGroup.id} plan={activePlan || null} dishes={dishes} />
+                  <ShoppingList groupId={activeGroup.id} plan={activePlan || null} dishes={dishes} plans={plans} />
                 )}
               </motion.div>
             )}
