@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Wand2, Share2, ShoppingBag, Plus, Trash2, CheckCircle2, GripVertical, X } from 'lucide-react';
 import { Dish, WeeklyPlan, DayPlan } from '../types';
@@ -70,10 +71,20 @@ const DroppableSlot: React.FC<DroppableSlotProps> = ({
               : 'border-dashed border-slate-100 flex items-center justify-center hover:border-slate-300'
         }`}
       >
-        {dishIds.map((id: string) => {
+        {dishIds.map((id: string, index: number) => {
           const dish = dishes.find(d => (d.id === id || (d as any)._id === id));
           if (!dish) return null;
-          return <DraggableDishItem key={`${day}-${slot}-${id}`} dish={dish} slot={slot} day={day} onRemove={onRemove} disabled={!isDragEnabled} />;
+          return (
+            <DraggableDishItem 
+              key={`${day}-${slot}-${id}-${index}`} 
+              index={index}
+              dish={dish} 
+              slot={slot} 
+              day={day} 
+              onRemove={onRemove} 
+              disabled={!isDragEnabled} 
+            />
+          );
         })}
         {!dishIds.length && (
           <span className="text-lg text-slate-200">+</span>
@@ -87,18 +98,17 @@ interface DraggableDishItemProps {
   dish: Dish;
   slot: 'lunch' | 'dinner';
   day: string;
+  index: number;
   onRemove: (id: string) => void;
   disabled?: boolean;
 }
 
 // Draggable Dish Item (Inside Planner)
-const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, onRemove, disabled = false }) => {
+const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, index, onRemove, disabled = false }) => {
   const id = dish.id || (dish as any)._id;
-  
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    // Use a stable ID so dnd-kit can track it reliably
-    id: `planner-${id}-${day}-${slot}`, 
-    data: { dishId: id, source: 'planner', sourceDay: day, sourceSlot: slot },
+    id: `planner-${id}-${day}-${slot}-${index}`,
+    data: { dishId: id, source: 'planner', sourceDay: day, sourceSlot: slot, index },
     disabled
   });
 
@@ -108,15 +118,11 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
     touchAction: 'none'
   };
 
-  if (isDragging) {
-    return <div ref={setNodeRef} className="opacity-30 bg-slate-100 rounded-xl w-full h-12 mb-2" />;
-  }
-
   return (
     <div 
       ref={setNodeRef} 
       style={style}
-      className={`mb-2 last:mb-0 w-full p-2 bg-white rounded-xl shadow-sm border border-slate-100 group relative ${slot === 'lunch' ? 'hover:border-emerald-200' : 'hover:border-indigo-200'}`}
+      className={`mb-2 last:mb-0 w-full p-2 bg-white rounded-xl shadow-sm border border-slate-100 group relative ${slot === 'lunch' ? 'hover:border-emerald-200' : 'hover:border-indigo-200'} ${isDragging ? 'opacity-30 bg-slate-100 border-dashed border-slate-300' : ''}`}
     >
       <div className="flex items-center gap-2">
         {!disabled && (
@@ -125,7 +131,7 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-slate-800 leading-tight">
+          <p className="text-xs font-bold text-slate-800 leading-tight truncate">
             {dish.name}
           </p>
           <p className={`text-[9px] font-bold uppercase ${slot === 'lunch' ? 'text-emerald-600' : 'text-indigo-600'}`}>
@@ -137,7 +143,7 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
             e.stopPropagation();
             onRemove(id);
           }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-500 transition-all"
+          className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-500 transition-all"
         >
           <Trash2 className="w-3 h-3" />
         </button>
@@ -149,21 +155,22 @@ const DraggableDishItem: React.FC<DraggableDishItemProps> = ({ dish, slot, day, 
 interface DraggableDishProps {
   dish: Dish;
   disabled?: boolean;
+  prefix?: string;
 }
 
 // Draggable Dish Component (From Repository)
-const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false }) => {
+const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false, prefix = 'repo' }) => {
   const id = dish.id || (dish as any)._id;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `repo-${id}`,
+    id: `${prefix}-${id}`,
     data: { dishId: id, source: 'repository' },
     disabled
   });
 
   const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transform: transform && !isDragging ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     zIndex: isDragging ? 50 : undefined,
-    touchAction: 'none'
+    touchAction: 'none' as const
   };
 
   return (
@@ -172,10 +179,9 @@ const DraggableDish: React.FC<DraggableDishProps> = ({ dish, disabled = false })
       style={style}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
-      // Remove 'transition-all' from the template literal below
-      className={`p-3 bg-white border border-slate-200 rounded-2xl shadow-sm ${disabled ? 'opacity-80' : 'cursor-grab active:cursor-grabbing hover:border-emerald-500'}`}
+      className={`p-3 bg-white border border-slate-200 rounded-2xl shadow-sm ${isDragging ? '' : 'transition-all'} ${disabled ? 'opacity-80' : 'cursor-grab active:cursor-grabbing hover:border-emerald-500'} ${isDragging ? 'opacity-30 bg-slate-100 border-dashed border-slate-300' : ''}`}
     >
-      <p className="text-xs font-bold text-slate-800">{dish.name}</p>
+      <p className="text-xs font-bold text-slate-800 truncate">{dish.name}</p>
       <p className="text-[10px] text-slate-400 font-bold uppercase">{dish.category}</p>
     </div>
   );
@@ -206,13 +212,11 @@ export default function WeeklyPlanner({
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 6,
+        delay: 150,
+        tolerance: 15,
       },
     })
   );
-
-  const isDropping = useRef(false);
 
   useEffect(() => {
     if (onLoadingChange) onLoadingChange(loading);
@@ -284,63 +288,69 @@ export default function WeeklyPlanner({
     setSelectingSlot({ day, slot });
   };
 
-  const [wasSuccessfulDrop, setWasSuccessfulDrop] = useState(false);
-
   const handleDragStart = (event: DragStartEvent) => {
-  isDropping.current = false; // Reset
-  setActiveDragId(event.active.id as string);
+    const dragId = event.active.id as string;
+    setActiveDragId(dragId);
   };
 
-const handleDragEnd = async (event: DragEndEvent) => {
-  const { over, active } = event;
-  
-  if (over && over.data.current) {
-    isDropping.current = true; // Mark as successful drop immediately
-  }
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { over, active } = event;
+    const dragId = active.id as string;
+    setActiveDragId(null);
+    if (dragId.startsWith('repo-')) {
+      setIsLibraryOpen(false);
+    }
+    
+    if (over && over.data.current) {
+      const { day: targetDay, slot: targetSlot } = over.data.current as { day: string, slot: 'lunch' | 'dinner' };
+      const { dishId, source, sourceDay, sourceSlot } = active.data.current as any;
+      
+      if (!dishId) return;
 
-  // 2. We have a valid drop
-  setWasSuccessfulDrop(true);
+      const activePlan = await ensurePlanExists();
+      if (!activePlan) return;
 
-  const { day: targetDay, slot: targetSlot } = over.data.current as { day: string, slot: 'lunch' | 'dinner' };
-  const { dishId, source, sourceDay, sourceSlot } = active.data.current as any;
-  
-  if (!dishId) return;
+      // Avoid redundant drops
+      if (source === 'planner' && sourceDay === targetDay && sourceSlot === targetSlot) return;
 
-  const activePlan = plans.find(p => p.weekId === currentWeekId);
-  if (!activePlan) return;
+      let newDays = { ...activePlan.days };
 
-  if (source === 'planner' && sourceDay === targetDay && sourceSlot === targetSlot) return;
+      // If moving within planner, remove from source FIRST
+      if (source === 'planner') {
+         const oldSlot = newDays[sourceDay as keyof WeeklyPlan['days']][sourceSlot as 'lunch' | 'dinner'];
+         newDays = {
+           ...newDays,
+           [sourceDay]: {
+             ...newDays[sourceDay as keyof WeeklyPlan['days']],
+             [sourceSlot]: { dishIds: oldSlot.dishIds.filter(id => id !== dishId) }
+           }
+         };
+      }
 
-  // 3. Prepare the update
-  let newDays = JSON.parse(JSON.stringify(activePlan.days));
+      // Add to target slot
+      const targetSlotData = newDays[targetDay as keyof WeeklyPlan['days']][targetSlot];
+      const targetDishIds = targetSlotData.dishIds || [];
+      if (!targetDishIds.includes(dishId)) {
+        newDays = {
+          ...newDays,
+          [targetDay]: {
+            ...newDays[targetDay as keyof WeeklyPlan['days']],
+            [targetSlot]: { dishIds: [...targetDishIds, dishId] }
+          }
+        };
+      }
 
-  if (source === 'planner') {
-    const oldSlot = newDays[sourceDay][sourceSlot];
-    oldSlot.dishIds = oldSlot.dishIds.filter((id: string) => id !== dishId);
-  }
-
-  const targetSlotData = newDays[targetDay][targetSlot];
-  if (!targetSlotData.dishIds.includes(dishId)) {
-    targetSlotData.dishIds.push(dishId);
-  }
-
-  const updatedPlan = { ...activePlan, days: newDays };
-  
-  // 4. Update UI
-  setPlans(prev => prev.map(p => p.weekId === currentWeekId ? updatedPlan : p));
-  setActiveDragId(null);
-  // 5. Persist (Now variables are in scope)
-  try {
-    await apiFetch(`/api/plans/${activePlan.id || (activePlan as any)._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedPlan)
-    });
-  } catch (err) {
-    console.error("Failed to save dragged plan", err);
-    fetchPlans(); 
-  }
-};
+      const updatedPlan: WeeklyPlan = { ...activePlan, days: newDays };
+      setPlans(prev => prev.map(p => p.id === updatedPlan.id ? updatedPlan : p));
+      
+      // Persist change
+      await apiFetch(`/api/plans/${activePlan.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPlan)
+      });
+    }
+  };
 
   const handleRemoveDish = async (day: string, slot: 'lunch' | 'dinner', dishId: string) => {
     if (!currentPlan) return;
@@ -451,6 +461,7 @@ const handleDragEnd = async (event: DragEndEvent) => {
         setLoading(false);
         return;
       }
+
       const prevWeekDate = new Date(currentWeek);
       prevWeekDate.setDate(prevWeekDate.getDate() - 7);
       const prevWeekId = getWeekId(prevWeekDate);
@@ -545,37 +556,18 @@ const handleDragEnd = async (event: DragEndEvent) => {
               className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all border ${isLibraryOpen ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-600 hover:text-emerald-600'}`}
             >
               <div className={`w-4 h-4 flex items-center justify-center rounded ${isLibraryOpen ? 'bg-emerald-400 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                <Plus className="w-3 h-3" />
+                 <Plus className="w-3 h-3" />
               </div>
               Library
             </button>
             <button 
               onClick={() => setIsDragEnabled(!isDragEnabled)}
-              title={isDragEnabled ? "Disable Drag and Drop" : "Enable Drag and Drop"}
-              className={`p-2 rounded-xl transition-all duration-200 border flex items-center justify-center ${
-                isDragEnabled 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-600 shadow-sm shadow-emerald-100' 
-                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
-              }`}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all border ${isDragEnabled ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-600 hover:text-indigo-600'}`}
             >
-              <div className="relative flex items-center justify-center h-5 w-5">
-                <svg 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2.5" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  className="w-4 h-4"
-                >
-                  <rect x="3" y="5" width="5" height="5" rx="1" />
-                  <rect x="3" y="14" width="5" height="5" rx="1" />
-                  <path d="M12 12h7m-3-3 3 3-3 3" />
-                </svg>
-                {isDragEnabled && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full border-2 border-white" />
-                )}
+              <div className={`w-4 h-4 flex items-center justify-center rounded text-white ${isDragEnabled ? 'bg-indigo-400' : 'bg-slate-100 text-slate-400'}`}>
+                 <GripVertical className="w-3 h-3" />
               </div>
+              {isDragEnabled ? 'DND On' : 'DND Off'}
             </button>
           </div>
         </div>
@@ -623,99 +615,102 @@ const handleDragEnd = async (event: DragEndEvent) => {
 
           <AnimatePresence>
             {isLibraryOpen && (
-              <>
-                {/* Backdrop for mobile/tablet only */}
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setIsLibraryOpen(false)}
-                  className="fixed inset-x-0 bottom-0 top-16 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden"
-                />
-
-                {/* Mobile Side Drawer (Slides in on mobile & tablet) */}
-                <motion.div 
-                  initial={{ x: "100%", opacity: 0.8 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: "100%", opacity: 0.8 }}
-                  transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-                  className="fixed top-16 bottom-0 right-0 z-50 w-[290px] sm:w-[320px] max-w-[85vw] flex flex-col bg-slate-50 border-l border-slate-200 shadow-2xl p-4 lg:hidden"
-                >
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
-                      <div className="flex items-center gap-2">
-                        {isDragEnabled && (
-                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
-                        )}
-                        <button onClick={() => setIsLibraryOpen(false)} className="p-1.5 hover:bg-white rounded-lg text-slate-400">
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                    <input 
-                      type="text" 
-                      placeholder="Search library..."
-                      value={repoSearch}
-                      onChange={(e) => setRepoSearch(e.target.value)}
-                      className="w-full px-4 py-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1 pb-20">
-                    {filteredRepoDishes.map(dish => (
-                      <DraggableDish key={`lib-mobile-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
-                    ))}
-                    {filteredRepoDishes.length === 0 && (
-                      <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
-                        No dishes found...
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-
-                {/* Desktop Sidebar (Collapses with width animation) */}
-                <motion.div 
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: 280 }}
-                  exit={{ opacity: 0, width: 0 }}
-                  className="hidden lg:flex flex-col bg-slate-50 rounded-[2.5rem] border border-slate-200 shadow-inner overflow-hidden p-4 h-[600px] sticky top-4 w-[280px]"
-                >
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-4 px-2">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
-                      <div className="flex items-center gap-2">
-                        {isDragEnabled && (
-                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
-                        )}
-                        <button onClick={() => setIsLibraryOpen(false)} 
-                          className="p-1 hover:bg-white rounded-lg text-slate-400">
-                          <X className="w-4 h-4" 
-                        />
-                        </button>
-                      </div>
-                    </div>
-                    <input 
-                      type="text" 
-                      placeholder="Search library..."
-                      value={repoSearch}
-                      onChange={(e) => setRepoSearch(e.target.value)}
-                      className="w-full px-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                    {filteredRepoDishes.map(dish => (
-                      <DraggableDish key={`lib-desktop-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} />
-                    ))}
-                    {filteredRepoDishes.length === 0 && (
-                      <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
-                        No dishes found...
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              </>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsLibraryOpen(false)}
+                className="fixed inset-0 bg-slate-900/5 z-50 lg:hidden"
+              />
             )}
           </AnimatePresence>
+
+          {/* Mobile Side Drawer (Slides in on mobile & tablet) - Bypasses transform nested bug in dnd-kit */}
+          <div 
+            style={{
+              right: isLibraryOpen ? '0px' : '-330px',
+              transition: 'right 300ms cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            className="fixed top-16 bottom-0 z-50 w-[220px] sm:w-[250px] max-w-[80vw] flex flex-col bg-slate-50 border-l border-slate-200 shadow-2xl p-4 lg:hidden"
+          >
+            <div className="flex flex-col h-full">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
+                  <div className="flex items-center gap-2">
+                    {isDragEnabled && (
+                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
+                    )}
+                    <button onClick={() => setIsLibraryOpen(false)} className="p-1.5 hover:bg-white rounded-lg text-slate-400">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Search library..."
+                  value={repoSearch}
+                  onChange={(e) => setRepoSearch(e.target.value)}
+                  className="w-full px-4 py-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1 pb-20">
+                {filteredRepoDishes.map(dish => (
+                  <DraggableDish key={`lib-mobile-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} prefix="repo-mobile" />
+                ))}
+                {filteredRepoDishes.length === 0 && (
+                  <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                    No dishes found...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Sidebar (Collapses smoothly to 0 width without unmounting to preserve dnd-kit measurements) */}
+          <div 
+            style={{
+              width: isLibraryOpen ? '280px' : '0px',
+              opacity: isLibraryOpen ? 1 : 0,
+              marginLeft: isLibraryOpen ? '24px' : '0px',
+              pointerEvents: isLibraryOpen ? 'auto' : 'none',
+              transition: 'all 300ms cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            className="hidden lg:flex flex-col bg-slate-50 rounded-[2.5rem] border border-slate-200 shadow-inner overflow-hidden p-4 h-[600px] sticky top-4 shrink-0"
+          >
+            <div className="flex flex-col h-full min-w-[248px]">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-4 px-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Dish Library</h4>
+                  <div className="flex items-center gap-2">
+                    {isDragEnabled && (
+                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">DND On</span>
+                    )}
+                    <button onClick={() => setIsLibraryOpen(false)} className="p-1 hover:bg-white rounded-lg text-slate-400">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Search library..."
+                  value={repoSearch}
+                  onChange={(e) => setRepoSearch(e.target.value)}
+                  className="w-full px-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                {filteredRepoDishes.map(dish => (
+                  <DraggableDish key={`lib-desktop-${dish.id || (dish as any)._id}`} dish={dish} disabled={false} prefix="repo-desktop" />
+                ))}
+                {filteredRepoDishes.length === 0 && (
+                  <div className="p-8 text-center text-slate-400 text-xs font-medium italic">
+                    No dishes found...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {!currentPlan && !loading && (
@@ -808,16 +803,26 @@ const handleDragEnd = async (event: DragEndEvent) => {
       </div>
       
       {/* Drag Overlay for smooth preview */}
-      
-<DragOverlay dropAnimation={null}>
-  {activeDragId && !isDropping.current ? (
-    <div className="p-3 bg-white rounded-xl shadow-2xl border border-emerald-200 ring-2 ring-emerald-500/20 max-w-[180px] cursor-grabbing">
-      <p className="text-xs font-bold text-slate-800 leading-tight">
-        {dishes.find(d => (d.id === activeDragId.replace('repo-', '').replace('planner-', '').split('-')[0]))?.name || 'Dragging...'}
-      </p>
-    </div>
-  ) : null}
-</DragOverlay>
+      {createPortal(
+        <DragOverlay dropAnimation={null}>
+          {activeDragId ? (
+            (() => {
+              const dish = dishes.find(d => {
+                const id = d.id || (d as any)._id;
+                return activeDragId.includes(id);
+              });
+              if (!dish) return null;
+              return (
+                <div className="p-3 bg-white rounded-2xl shadow-2xl border-2 border-emerald-500 ring-4 ring-emerald-500/10 min-w-[180px] max-w-[240px] cursor-grabbing select-none">
+                  <p className="text-xs font-bold text-slate-800 truncate">{dish.name}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">{dish.category}</p>
+                </div>
+              );
+            })()
+          ) : null}
+        </DragOverlay>,
+        document.body
+      )}
     </DndContext>
   );
 }
