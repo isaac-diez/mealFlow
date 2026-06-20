@@ -27,6 +27,7 @@ export default function App() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -91,6 +92,33 @@ export default function App() {
       }
     } catch (error) {
       console.error("Failed to create group", error);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    try {
+      const res = await apiFetch(`/api/groups/${groupId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const remaining = groups.filter(g => g.id !== groupId);
+        setGroups(remaining);
+        if (activeGroup?.id === groupId) {
+          if (remaining.length > 0) {
+            setActiveGroup(remaining[0]);
+          } else {
+            setActiveGroup(null);
+            setDishes([]);
+            setPlans([]);
+          }
+        }
+        setGroupToDelete(null);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to delete group");
+      }
+    } catch (error) {
+      console.error("Failed to delete group", error);
     }
   };
 
@@ -259,14 +287,7 @@ export default function App() {
 
           <div className="mt-auto p-4 bg-slate-50 rounded-3xl border border-slate-200">
           <div className="mb-4">
-            <p>
-                          <button 
-                  onClick={() => setIsInviteModalOpen(true)}
-                  className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1 hover:text-emerald-600 transition-colors"
-              >
-                Space Members
-              </button>
-              </p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Space Members</p>
             <div className="flex flex-wrap items-center -space-x-2">
               {activeGroup?.members?.map((m: string, i: number) => (
                 <div key={i} className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-slate-50 flex items-center justify-center text-[10px] font-bold text-emerald-700 relative group overflow-hidden" title={m}>
@@ -285,7 +306,12 @@ export default function App() {
           <div className="flex items-center gap-3 mb-3 pt-3 border-t border-slate-200">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Space</p>
-              <p className="text-sm font-bold text-slate-800 transition-colors text-left w-full">{activeGroup?.name}</p>
+              <button 
+                onClick={() => setIsInviteModalOpen(true)}
+                className="text-sm font-bold text-slate-800 truncate hover:text-emerald-600 transition-colors text-left w-full"
+              >
+                {activeGroup?.name}
+              </button>
             </div>
           </div>
           <button 
@@ -325,7 +351,7 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl p-6"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Group Settings</h2>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Space Settings</h2>
               <p className="text-sm text-slate-500 mb-6 px-1">Manage members and settings for <strong>{activeGroup?.name}</strong>.</p>
               
               <div className="mb-6">
@@ -365,7 +391,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              
+
               {inviteSuccess ? (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -442,21 +468,35 @@ export default function App() {
               <h2 className="text-xl font-bold text-slate-800 mb-4">Switch Space</h2>
               <div className="space-y-2 mb-6 max-h-48 overflow-y-auto custom-scrollbar">
                 {groups.map(group => (
-                  <button
+                  <div
                     key={group.id}
-                    onClick={() => {
-                      setActiveGroup(group);
-                      setIsGroupModalOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                    className={`w-full flex items-center justify-between p-2 rounded-2xl border transition-all ${
                       activeGroup?.id === group.id 
                       ? 'border-emerald-500 bg-emerald-50/50' 
                       : 'border-slate-100 hover:border-slate-300'
                     }`}
                   >
-                    <span className="font-bold text-slate-800 text-sm">{group.name}</span>
-                    {activeGroup?.id === group.id && <div className="w-2 h-2 bg-emerald-500 rounded-full" />}
-                  </button>
+                    <button
+                      onClick={() => {
+                        setActiveGroup(group);
+                        setIsGroupModalOpen(false);
+                      }}
+                      className="flex-1 text-left px-2 py-1 flex items-center justify-between"
+                    >
+                      <span className="font-bold text-slate-800 text-sm">{group.name}</span>
+                      {activeGroup?.id === group.id && <div className="w-2 h-2 bg-emerald-500 rounded-full" />}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGroupToDelete(group);
+                      }}
+                      className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      title="Delete Space"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
               <div className="pt-4 border-t border-slate-100">
@@ -476,6 +516,49 @@ export default function App() {
                     Create
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Group Deletion Confirmation Modal */}
+      <AnimatePresence>
+        {groupToDelete && (
+          <motion.div 
+            key="delete-confirm-modal"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl p-6 border border-slate-100"
+            >
+              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+                <Trash2 className="w-6 h-6 text-rose-500" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Delete Space?</h2>
+              <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+                Are you sure you want to permanently delete <strong>{groupToDelete.name}</strong>? All recipes, plans, lists, and members under this space will be deleted. This cannot be undone.
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setGroupToDelete(null)}
+                  className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all text-sm"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDeleteGroup(groupToDelete.id)}
+                  className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-2xl font-bold shadow-md transition-all text-sm"
+                >
+                  Delete
+                </button>
               </div>
             </motion.div>
           </motion.div>
@@ -552,15 +635,6 @@ export default function App() {
                 <div className="p-4 bg-slate-50 rounded-3xl border border-slate-200">
                   <div className="mb-4">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Space Members</p>
-                      <button 
-                        onClick={() => {
-                          setIsInviteModalOpen(true);
-                          setIsSidebarOpen(false);
-                        }}
-                        className="text-sm font-bold text-slate-800 truncate hover:text-emerald-600 transition-colors text-left w-full"
-                      >
-                        {activeGroup?.name}
-                      </button>
                     <div className="flex flex-wrap items-center gap-2">
                       {activeGroup?.members?.map((m: string, i: number) => (
                         <div key={i} className="w-9 h-9 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-emerald-700 shadow-sm" title={m}>
@@ -679,9 +753,9 @@ export default function App() {
           <AnimatePresence mode="wait">
             {!activeGroup ? (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
                 className="flex flex-col items-center justify-center py-20 text-center"
               >
                 <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mb-6">
@@ -701,9 +775,9 @@ export default function App() {
             ) : (
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'planner' && (
