@@ -14,7 +14,8 @@ const DishSchema = new mongoose.Schema({
   ingredients: [IngredientSchema],
   prepTime: { type: Number, default: 30 },
   isRegular: { type: Boolean, default: true },
-  groupId: { type: String, required: true }
+  groupId: { type: String, required: true },
+  deletedByGroups: { type: [String], default: [] }
 });
 
 const GroupSchema = new mongoose.Schema({
