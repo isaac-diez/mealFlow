@@ -2,91 +2,42 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-import express, { Request, Response, NextFunction } from "express";
+import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
+import { MongoClient, ObjectId } from "mongodb";
 import mongoose from 'mongoose';
 import { User, Group, Dish, WeeklyPlan, ShoppingListItem } from './models.js';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
-const MONGODB_URI = process.env.MONGODB_URI;
 
-// --- Validation Schemas ---
-const RegisterSchema = z.object({
-  body: z.object({
-    email: z.string().email(),
-    password: z.string().min(6),
-    name: z.string().optional(),
-  }),
-});
+// MongoDB Connection
+let client: MongoClient | null = null;
+const dbName = "mealflow";
 
-const LoginSchema = z.object({
-  body: z.object({
-    email: z.string().email(),
-    password: z.string(),
-  }),
-});
-
-const DishSchema = z.object({
-  body: z.object({
-    name: z.string().min(1),
-    category: z.string(),
-    suitableForLunch: z.boolean(),
-    suitableForDinner: z.boolean(),
-    prepTime: z.number().min(0),
-    ingredients: z.array(z.object({
-      name: z.string(),
-      quantity: z.string(),
-      category: z.string()
-    })).optional()
-  }),
-});
-
-const ShoppingItemSchema = z.object({
-  body: z.object({
-    name: z.string(),
-    quantity: z.string(),
-    category: z.string(),
-    purchased: z.boolean().optional()
-  })
-});
-
-// --- Validation Middleware ---
-const validate = (schema: z.ZodObject) => 
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      await schema.parseAsync({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      });
-      return next();
-    } catch (error) {
-      // Retorna los errores de validación de forma legible
-      return res.status(400).json({
-        error: "Validation failed",
-        details: error instanceof z.ZodError ? error.issues : error
-      });
-    }
-  };
-
-
-async function connectDb() {
-  if (!MONGODB_URI) {
+async function getDb() {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
     throw new Error("MONGODB_URI environment variable is required");
   }
   
   if (mongoose.connection.readyState === 0) {
-    console.log("Connecting Mongoose to MongoDB...");
-    await mongoose.connect(MONGODB_URI, { dbName: "mealflow" });
+    console.log("Connecting Mongoose to MongoDB Atlas...");
+    await mongoose.connect(uri, { dbName });
   }
+
+  if (!client) {
+    console.log("Connecting MongoClient to MongoDB Atlas...");
+    client = new MongoClient(uri);
+    await client.connect();
+  }
+  return client.db(dbName);
 }
 
 async function startServer() {
@@ -97,11 +48,9 @@ async function startServer() {
 
   // Connect to DB immediately
   try {
-    await connectDb();
-    // await seedData();
+    await getDb();
   } catch (err) {
     console.error("Critical: Could not connect to DB", err);
-    process.exit(1);
   }
 
   // --- Auth Middleware ---
@@ -118,7 +67,7 @@ async function startServer() {
   };
 
   // --- Auth Routes ---
-  app.post("/api/auth/register", validate(RegisterSchema), async (req: Request, res: Response) => {
+  app.post("/api/auth/register", async (req, res) => {
     try {
       const { email, password, name } = req.body;
       if (!email || !password) return res.status(400).json({ error: "Email and password required" });
@@ -140,7 +89,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/login", validate(LoginSchema), async (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
       const user = await User.findOne({ email });
@@ -180,21 +129,40 @@ async function startServer() {
       const groupCheck = await Group.findById(groupId);
       if (!groupCheck || !groupCheck.members?.includes(req.user.email)) return res.status(403).json({ error: "Unauthorized" });
 
-      const homeGroup = await Group.findOne({ name: "Home" });
-      const homeGroupId = homeGroup ? homeGroup._id.toString() : null;
+      // Count dishes for this specific group
+      const dishesCount = await Dish.countDocuments({ groupId });
+      if (dishesCount === 0) {
+        console.log(`[BACKEND] No dishes for group ${groupId}. Seeding separate default dishes...`);
+      }
 
-      const query = homeGroupId 
-        ? { groupId: { $in: [groupId, homeGroupId] } }
-        : { groupId: groupId };
-
-      const dishes = await Dish.find(query);
+      const dishes = await Dish.find({
+        $or: [
+          { groupId },
+          { isRegular: false }
+        ],
+        deletedByGroups: { $ne: groupId }
+      });
       
-      // Filter out duplicate dish names if they exist in both
+      // Sort dishes so that group-owned dishes come first, and within that, regular ones first.
+      // This ensures that the deduplication process below always selects the group's custom/regular
+      // version over any default or shared vault version of the same dish.
+      dishes.sort((a: any, b: any) => {
+        const aIsGroup = a.groupId === groupId ? 1 : 0;
+        const bIsGroup = b.groupId === groupId ? 1 : 0;
+        if (aIsGroup !== bIsGroup) return bIsGroup - aIsGroup;
+        
+        const aIsReg = a.isRegular !== false ? 1 : 0;
+        const bIsReg = b.isRegular !== false ? 1 : 0;
+        return bIsReg - aIsReg;
+      });
+      
+      // Filter out duplicate dish names if they exist in this group
       const uniqueDishes = [];
       const seenNames = new Set();
       for (const d of dishes) {
-         if (!seenNames.has(d.name)) {
-            seenNames.add(d.name);
+         const nameLower = d.name.toLowerCase().trim();
+         if (!seenNames.has(nameLower)) {
+            seenNames.add(nameLower);
             uniqueDishes.push({ ...d.toObject(), id: d._id.toString() });
          }
       }
@@ -206,7 +174,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/groups/:groupId/dishes", authenticateToken, validate(DishSchema), async (req: any, res) => {
+  app.post("/api/groups/:groupId/dishes", authenticateToken, async (req: any, res) => {
     try {
       const groupId = req.params.groupId;
       const groupCheck = await Group.findById(groupId);
@@ -224,23 +192,40 @@ async function startServer() {
     }
   });
 
-  app.put("/api/groups/:groupId/dishes/:dishId", authenticateToken, validate(DishSchema), async (req: any, res) => {
+  app.put("/api/groups/:groupId/dishes/:dishId", authenticateToken, async (req: any, res) => {
     try {
       const dishId = req.params.dishId;
+      const groupId = req.params.groupId;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) return res.status(403).json({ error: "Unauthorized" });
+
+      const dish = await Dish.findById(dishId);
+      if (!dish) return res.status(404).json({ error: "Dish not found" });
+      const group = await Group.findById(groupId);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+
       const updateData = { ...req.body };
       delete updateData._id;
       delete updateData.id;
-      delete updateData.groupId; 
+      updateData.groupId = groupId;
 
-      const result = await Dish.findByIdAndUpdate(dishId, { $set: updateData }, { returnDocument: 'after' });
-      if (!result) return res.status(404).json({ error: "Dish not found" });
+      if (dish.groupId !== groupId || dish.isRegular === false) {
+        console.log(`[BACKEND] Cloning shared/vault dish "${dish.name}" (ID: ${dishId}) for group ${group.name}`);
+        const clonedDish = new Dish({
+          ...dish.toObject(),
+          _id: new mongoose.Types.ObjectId(),
+          groupId: groupId,
+          ...updateData
+        });
+        await clonedDish.save();
+        res.json({ ...clonedDish.toObject(), id: clonedDish._id.toString() });
+      } else {
+        const result = await Dish.findByIdAndUpdate(dishId, { $set: updateData }, { new: true });
+        if (!result) return res.status(404).json({ error: "Dish not found" });
 
-      res.json({ ...result.toObject(), id: result._id.toString() });
-    } catch (error: any) {
-      if (error.name === "ZodError") {
-        console.log("Validation Failed:", error.errors); // THIS is the gold mine
-        return res.status(400).json({ error: "Validation failed", details: error.errors });
+        res.json({ ...result.toObject(), id: result._id.toString() });
       }
+    } catch (error: any) {
       console.error("Failed to update dish:", error);
       res.status(500).json({ error: "Failed to update dish", details: error.message || error.toString() });
     }
@@ -279,11 +264,32 @@ async function startServer() {
       if (!mongoose.Types.ObjectId.isValid(dishId)) {
         return res.status(400).json({ error: "Invalid dish ID" });
       }
-      
-      const result = await Dish.findByIdAndDelete(dishId);
-      if (!result) return res.json({ success: true }); // Handle idempotent delete
-      
-      console.log(`[BACKEND] Successfully deleted dish: ${result.name}`);
+
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const dish = await Dish.findById(dishId);
+      if (!dish) return res.json({ success: true });
+
+      if (dish.isRegular === false || dish.groupId !== groupId) {
+        // Shared/vault dish - do not delete the main document!
+        // Instead, mark all matching vault dishes by name as deleted for this group only
+        await Dish.updateMany(
+          {
+            name: { $regex: new RegExp(`^${dish.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') },
+            isRegular: false
+          },
+          { $addToSet: { deletedByGroups: groupId } }
+        );
+        console.log(`[BACKEND] Soft deleted all vault dishes matching name "${dish.name}" (ID: ${dishId}) for group ${groupId}`);
+      } else {
+        // Group-owned regular dish, delete it fully from DB
+        await Dish.findByIdAndDelete(dishId);
+        console.log(`[BACKEND] Fully deleted group regular dish: "${dish.name}"`);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       console.error("[BACKEND] Group-specific deletion error:", error);
@@ -353,6 +359,32 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/groups/:groupId", authenticateToken, async (req: any, res) => {
+    try {
+      const groupId = req.params.groupId;
+      const group = await Group.findById(groupId);
+      
+      if (!group) {
+        return res.status(404).json({ error: "Group not found" });
+      }
+      
+      if (!group.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Not authorized to delete this group" });
+      }
+
+      await Group.findByIdAndDelete(groupId);
+      await Dish.deleteMany({ groupId });
+      await WeeklyPlan.deleteMany({ groupId });
+      await ShoppingListItem.deleteMany({ groupId });
+
+      console.log(`[BACKEND] Group "${group.name}" (${groupId}) deleted successfully including all related data.`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed to delete group:", error);
+      res.status(500).json({ error: "Failed to delete group", details: error.message || error.toString() });
+    }
+  });
+
   app.get("/api/groups/:groupId/plans", authenticateToken, async (req, res) => {
     try {
       const plans = await WeeklyPlan.find({ groupId: req.params.groupId });
@@ -404,7 +436,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/groups/:groupId/shopping-list", authenticateToken, validate(ShoppingItemSchema), async (req, res) => {
+  app.post("/api/groups/:groupId/shopping-list", authenticateToken, async (req, res) => {
     try {
       const newItem = new ShoppingListItem({
         groupId: req.params.groupId,
@@ -417,7 +449,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/shopping-list/:itemId", authenticateToken, validate(ShoppingItemSchema), async (req, res) => {
+  app.put("/api/shopping-list/:itemId", authenticateToken, async (req, res) => {
     try {
       const itemId = req.params.itemId;
       const { id, _id, ...updateData } = req.body;

@@ -129,7 +129,7 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
     if (!dishId) return;
     if (!window.confirm("Delete this dish?")) return;
     try {
-      const res = await apiFetch(`/api/dishes/${dishId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/groups/${groupId}/dishes/${dishId}`, { method: 'DELETE' });
       if (res.ok) onDishesUpdate();
     } catch (error) { console.error(error); }
   };
@@ -202,7 +202,7 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${(!dish.category || dish.category === 'null') ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
                       {(!dish.category || dish.category === 'null') ? 'Missing Category' : dish.category}
                     </span>
-                    {/* <button 
+                    <button 
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleRegularStatus(dish);
@@ -211,7 +211,7 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                       title="Move to Recipe Vault"
                     >
                       Regular
-                    </button> */}
+                    </button>
                   </div>
                   <button 
                     onClick={(e) => { 
@@ -247,7 +247,7 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                     <div className="w-6 h-6 rounded-lg bg-slate-50 flex items-center justify-center">
                       <UtensilsCrossed className="w-3.5 h-3.5 text-slate-400" />
                     </div>
-                    {dish.ingredients.length} INGREDIENTES
+                    {dish.ingredients.length} Items
                   </div>
                 </div>
               </motion.div>
@@ -441,7 +441,7 @@ export default function DishRepository({ groupId, dishes, onDishesUpdate }: Dish
                            <BookOpen className="w-6 h-6" />
                         </div> */}
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-bold text-slate-700">{dish.name}</h4>
+                          <h4 className="font-bold text-slate-700 line-clamp-3">{dish.name}</h4>
                           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{dish.category}</span>
                         </div>
                         <div className="flex items-center gap-2">
