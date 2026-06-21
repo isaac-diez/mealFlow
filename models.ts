@@ -61,8 +61,19 @@ const ShoppingListItemSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const FridgeItemSchema = new mongoose.Schema({
+  groupId: { type: String, required: true },
+  name: { type: String, required: true },
+  quantity: { type: String, default: "1 unit" },
+  category: { type: String, default: "Other" },
+  inStock: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
 export const User = mongoose.model('User', UserSchema);
 export const Group = mongoose.model('Group', GroupSchema);
 export const Dish = mongoose.model('Dish', DishSchema);
 export const WeeklyPlan = mongoose.model('WeeklyPlan', WeeklyPlanSchema);
 export const ShoppingListItem = mongoose.model('ShoppingListItem', ShoppingListItemSchema);
+export const FridgeItem = mongoose.model('FridgeItem', FridgeItemSchema);

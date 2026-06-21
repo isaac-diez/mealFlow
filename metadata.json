@@ -1,6 +1,10 @@
 {
   "name": "MealFlow",
   "description": "Collaborative meal planning with AI-assisted weekly menus, group-based organization, and automated shopping lists.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

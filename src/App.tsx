@@ -5,17 +5,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LayoutDashboard, Utensils, ShoppingCart, Users, ChevronRight, Menu, X, Plus, LogOut, Wand2, Share2, CheckCircle2, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Utensils, ShoppingCart, Users, ChevronRight, Menu, X, Plus, LogOut, Wand2, Share2, CheckCircle2, Trash2, Apple } from 'lucide-react';
 import WeeklyPlanner from './components/WeeklyPlanner';
 import DishRepository from './components/DishRepository';
 import ShoppingList from './components/ShoppingList';
+import FridgeStock from './components/FridgeStock';
 import Auth from './components/Auth';
 import { Group, Dish, WeeklyPlan } from './types';
 import { apiFetch } from './lib/api';
 
 export default function App() {
   const [user, setUser] = useState<{id: string, name: string, email: string} | null>(null);
-  const [activeTab, setActiveTab] = useState<'planner' | 'dishes' | 'shopping'>('planner');
+  const [activeTab, setActiveTab] = useState<'planner' | 'dishes' | 'shopping' | 'fridge'>('planner');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroup, setActiveGroup] = useState<Group | null>(null);
@@ -222,6 +223,8 @@ export default function App() {
     { id: 'planner', label: 'Weekly Planner', icon: LayoutDashboard },
     { id: 'dishes', label: 'Dish Repository', icon: Utensils },
     { id: 'shopping', label: 'Shopping List', icon: ShoppingCart },
+    { id: 'fridge', label: 'Fridge Stock', icon: Apple },
+
   ];
 
   const handleLogout = () => {
@@ -799,6 +802,9 @@ export default function App() {
                 )}
                 {activeTab === 'shopping' && (
                   <ShoppingList groupId={activeGroup.id} plan={activePlan || null} dishes={dishes} plans={plans} />
+                )}
+                {activeTab === 'fridge' && (
+                  <FridgeStock groupId={activeGroup.id} />
                 )}
               </motion.div>
             )}
