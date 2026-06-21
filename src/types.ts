@@ -56,3 +56,14 @@ export interface WeeklyPlan {
     sunday: DayPlan;
   };
 }
+
+export interface FridgeItem {
+  id: string;
+  groupId: string;
+  name: string;
+  quantity: string;
+  category: string;
+  inStock: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
