@@ -8,9 +8,19 @@ import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { MongoClient, ObjectId } from "mongodb";
 import mongoose from 'mongoose';
-import { User, Group, Dish, WeeklyPlan, ShoppingListItem } from './models.js';
+import { User, Group, Dish, WeeklyPlan, ShoppingListItem, FridgeItem } from './models.js';
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { GoogleGenAI, Type } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,7 +54,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "15mb" }));
 
   // Connect to DB immediately
   try {
@@ -479,6 +489,181 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to clear completed items" });
+    }
+  });
+
+  // --- Fridge Stock API ---
+  app.get("/api/groups/:groupId/fridge", authenticateToken, async (req: any, res) => {
+    try {
+      const groupId = req.params.groupId;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const items = await FridgeItem.find({ groupId }).sort({ name: 1 });
+      res.json(items.map(item => ({ ...item.toObject(), id: item._id.toString() })));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch fridge stock" });
+    }
+  });
+
+  app.post("/api/groups/:groupId/fridge", authenticateToken, async (req: any, res) => {
+    try {
+      const groupId = req.params.groupId;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      
+      const { name, quantity, category, inStock } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: "Product name is required" });
+      }
+
+      // Check if item already exists in this group by name (case-insensitive)
+      let item = await FridgeItem.findOne({
+        groupId,
+        name: { $regex: new RegExp(`^${name.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') }
+      });
+
+      if (item) {
+        item.inStock = inStock !== undefined ? inStock : true;
+        if (quantity) item.quantity = quantity;
+        if (category) item.category = category;
+        item.updatedAt = new Date();
+        await item.save();
+      } else {
+        item = new FridgeItem({
+          groupId,
+          name: name.trim(),
+          quantity: quantity || "1 unit",
+          category: category || "Other",
+          inStock: inStock !== undefined ? inStock : true,
+        });
+        await item.save();
+      }
+
+      res.json({ ...item.toObject(), id: item._id.toString() });
+    } catch (error) {
+      console.error("Failed to add/update fridge item:", error);
+      res.status(500).json({ error: "Failed to save item to fridge stock" });
+    }
+  });
+
+  app.put("/api/groups/:groupId/fridge/:itemId", authenticateToken, async (req: any, res) => {
+    try {
+      const { groupId, itemId } = req.params;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { id, _id, ...updateData } = req.body;
+      updateData.updatedAt = new Date();
+
+      const result = await FridgeItem.findOneAndUpdate(
+        { _id: itemId, groupId },
+        { $set: updateData },
+        { new: true }
+      );
+
+      if (result) {
+        res.json({ ...result.toObject(), id: result._id.toString() });
+      } else {
+        res.status(404).json({ error: "Fridge item not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update fridge item" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId/fridge/:itemId", authenticateToken, async (req: any, res) => {
+    try {
+      const { groupId, itemId } = req.params;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const result = await FridgeItem.findOneAndDelete({ _id: itemId, groupId });
+      if (result) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "Fridge item not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete fridge item" });
+    }
+  });
+
+  app.post("/api/groups/:groupId/fridge/recognize", authenticateToken, async (req: any, res) => {
+    try {
+      const { groupId } = req.params;
+      const groupCheck = await Group.findById(groupId);
+      if (!groupCheck || !groupCheck.members?.includes(req.user.email)) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { image, mimeType } = req.body;
+      if (!image) {
+        return res.status(400).json({ error: "Image data in base64 format is required" });
+      }
+
+      console.log(`[BACKEND] Running product recognition with Gemini for group ${groupId}...`);
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType || "image/jpeg",
+                data: image,
+              },
+            },
+            {
+              text: "Analyze this image and identify the food product(s) captured in the photo. " +
+                    "Return a JSON array of recognized fridge items. Be accurate and concise. " +
+                    "Each item must have three string properties:\n" +
+                    "- 'name': A precise, reader-friendly name for the product (e.g., 'Skimmed Milk', 'Cherry Tomatoes', 'Pork Chops', 'Butter')\n" +
+                    "- 'quantity': A sensible quantity based on visual clues (e.g. '1 carton', '500g', '6 units', '1 bottle', or defaults like '1 unit')\n" +
+                    "- 'category': Must be exactly one of: 'Vegetables', 'Proteins', 'Dairy/Eggs', 'Pantry', 'Bakery', 'Beverages', 'Other'.",
+            },
+          ],
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "Name of the food ingredient or beverage" },
+                quantity: { type: Type.STRING, description: "Portion or pack size container details" },
+                category: { type: Type.STRING, description: "Preset segment container match" }
+              },
+              required: ["name", "quantity", "category"]
+            }
+          }
+        },
+      });
+
+      const jsonText = response.text;
+      console.log("[BACKEND] Recognized items JSON:", jsonText);
+
+      let items = [];
+      try {
+        if (jsonText) {
+          items = JSON.parse(jsonText.trim());
+        }
+      } catch (parseError) {
+        console.error("Failed parsing Gemini JSON output:", parseError);
+      }
+
+      res.json({ items });
+    } catch (error: any) {
+      console.error("Gemini recognition failed:", error);
+      res.status(500).json({ error: "Failed to recognize objects in photo", details: error.message || error.toString() });
     }
   });
 
