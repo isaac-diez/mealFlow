@@ -196,12 +196,12 @@ export default function App() {
   const handleShare = (format: 'whatsapp' | 'email') => {
     const plan = plans.find(p => p.weekId === getWeekId(currentWeek));
     if (!plan) {
-      alert("No plan to share for this week!");
+      alert("¡No se puede compartir pq no hay ningún plan para esta semana!");
       return;
     }
 
     let text = `📅 Meal Plan for ${getWeekId(currentWeek)}\n\n`;
-    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+    ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'].forEach(day => {
       const dayPlan = plan.days[day as keyof WeeklyPlan['days']];
       const lunchDishesNames = dayPlan.lunch.dishIds.map(id => dishes.find(d => (d.id === id || (d as any)._id === id))?.name || '---').join(', ');
       const dinnerDishesNames = dayPlan.dinner.dishIds.map(id => dishes.find(d => (d.id === id || (d as any)._id === id))?.name || '---').join(', ');
@@ -220,10 +220,10 @@ export default function App() {
   };
 
   const navItems = [
-    { id: 'planner', label: 'Weekly Planner', icon: LayoutDashboard },
-    { id: 'dishes', label: 'Dish Repository', icon: Utensils },
-    { id: 'shopping', label: 'Shopping List', icon: ShoppingCart },
-    { id: 'fridge', label: 'Fridge Stock', icon: Apple },
+    { id: 'planner', label: 'Planificador', icon: LayoutDashboard },
+    { id: 'dishes', label: 'Recetas', icon: Utensils },
+    { id: 'shopping', label: 'Lista de la compra', icon: ShoppingCart },
+    { id: 'fridge', label: 'En la nevera', icon: Apple },
 
   ];
 
@@ -290,7 +290,7 @@ export default function App() {
 
           <div className="mt-auto p-4 bg-slate-50 rounded-3xl border border-slate-200">
           <div className="mb-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Space Members</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Miembros de casa</p>
             <div className="flex flex-wrap items-center -space-x-2">
               {activeGroup?.members?.map((m: string, i: number) => (
                 <div key={i} className="w-8 h-8 rounded-full bg-emerald-100 border-2 border-slate-50 flex items-center justify-center text-[10px] font-bold text-emerald-700 relative group overflow-hidden" title={m}>
@@ -308,7 +308,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3 mb-3 pt-3 border-t border-slate-200">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Space</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Casa activa</p>
               <button 
                 onClick={() => setIsInviteModalOpen(true)}
                 className="text-sm font-bold text-slate-800 truncate hover:text-emerald-600 transition-colors text-left w-full"
@@ -321,7 +321,7 @@ export default function App() {
             onClick={() => setIsGroupModalOpen(true)}
             className="w-full py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-white/50 transition-colors mb-2"
           >
-            Switch Group
+            Cambiar casa
           </button>
           
           <button 
@@ -329,7 +329,7 @@ export default function App() {
             className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-bold text-rose-500 hover:bg-rose-50 rounded-xl transition-colors uppercase tracking-wider"
           >
             <LogOut className="w-3 h-3" />
-            Sign Out
+            Cerrar sesión
           </button>
         </div>
       </aside>
@@ -354,11 +354,11 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl p-6"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Space Settings</h2>
-              <p className="text-sm text-slate-500 mb-6 px-1">Manage members and settings for <strong>{activeGroup?.name}</strong>.</p>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Configuración de casa</h2>
+              <p className="text-sm text-slate-500 mb-6 px-1">Gestionar miembros y configuración para <strong>{activeGroup?.name}</strong>.</p>
               
               <div className="mb-6">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Current Members</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Miembros actuales</p>
                 <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
                   {activeGroup?.members?.map((memberEmail: string) => (
                     <div key={memberEmail} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 group/member">
@@ -371,7 +371,7 @@ export default function App() {
                       {memberEmail !== user.email && (
                         <button 
                           onClick={async () => {
-                            if (!window.confirm(`Are you sure you want to remove ${memberEmail}?`)) return;
+                            if (!window.confirm(`¿Estás seguro de que quieres eliminar a ${memberEmail}?`)) return;
                             try {
                               const res = await apiFetch(`/api/groups/${activeGroup.id}/members/${memberEmail}`, {
                                 method: 'DELETE'
@@ -382,7 +382,7 @@ export default function App() {
                                 setActiveGroup(updated);
                               }
                             } catch (error) {
-                              console.error("Failed to remove member", error);
+                              console.error("Error al intentar eliminar miembro", error);
                             }
                           }}
                           className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
@@ -404,12 +404,12 @@ export default function App() {
                   <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                   </div>
-                  <p className="text-emerald-600 font-bold">Successfully Invited!</p>
+                  <p className="text-emerald-600 font-bold">¡Miembro invitado con éxito!</p>
                 </motion.div>
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Email Address</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Dirección de correo electrónico</label>
                     <input 
                       type="email" 
                       placeholder="friend@example.com" 
@@ -424,7 +424,7 @@ export default function App() {
                     className="w-full py-2 text-[10px] font-bold text-slate-400 hover:text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-2"
                   >
                     <Plus className="w-3 h-3" />
-                    Or Copy Invite Message
+                    O copia el mensaje de invitación
                   </button>
 
                   <div className="flex gap-3 pt-2">
@@ -432,13 +432,13 @@ export default function App() {
                       onClick={() => setIsInviteModalOpen(false)}
                       className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                     <button 
                       onClick={handleAddMember}
                       className="flex-1 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-md shadow-emerald-100 hover:bg-emerald-700 transition-all"
                     >
-                      Invite
+                      Invitar
                     </button>
                   </div>
                 </div>
@@ -468,7 +468,7 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-sm bg-white rounded-[2rem] shadow-2xl p-6"
             >
-              <h2 className="text-xl font-bold text-slate-800 mb-4">Switch Space</h2>
+              <h2 className="text-xl font-bold text-slate-800 mb-4">Cambiar casa</h2>
               <div className="space-y-2 mb-6 max-h-48 overflow-y-auto custom-scrollbar">
                 {groups.map(group => (
                   <div
@@ -503,7 +503,7 @@ export default function App() {
                 ))}
               </div>
               <div className="pt-4 border-t border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Create New Space</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Crear nueva Casa</p>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -516,7 +516,7 @@ export default function App() {
                     onClick={handleCreateGroup}
                     className="px-4 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-md shadow-emerald-100 hover:bg-emerald-700 transition-all"
                   >
-                    Create
+                    Crear
                   </button>
                 </div>
               </div>
@@ -544,9 +544,9 @@ export default function App() {
               <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
                 <Trash2 className="w-6 h-6 text-rose-500" />
               </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Delete Space?</h2>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">¿Eliminar Casa?</h2>
               <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                Are you sure you want to permanently delete <strong>{groupToDelete.name}</strong>? All recipes, plans, lists, and members under this space will be deleted. This cannot be undone.
+                ¿Estás seguro de que quieres eliminar permanentemente la casa<strong>{groupToDelete.name}</strong>? Todas las recetas, planes, listas y miembros bajo esta casa serán eliminados. Esto no se puede deshacer.
               </p>
               
               <div className="flex gap-3">
@@ -554,13 +554,13 @@ export default function App() {
                   onClick={() => setGroupToDelete(null)}
                   className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all text-sm"
                 >
-                  Cancel
+                  Cancelar
                 </button>
                 <button 
                   onClick={() => handleDeleteGroup(groupToDelete.id)}
                   className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-2xl font-bold shadow-md transition-all text-sm"
                 >
-                  Delete
+                  Eliminar
                 </button>
               </div>
             </motion.div>
@@ -637,7 +637,7 @@ export default function App() {
               <div className="mt-auto space-y-6">
                 <div className="p-4 bg-slate-50 rounded-3xl border border-slate-200">
                   <div className="mb-4">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Space Members</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Miembros de la Casa</p>
                     <div className="flex flex-wrap items-center gap-2">
                       {activeGroup?.members?.map((m: string, i: number) => (
                         <div key={i} className="w-9 h-9 rounded-full bg-emerald-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-emerald-700 shadow-sm" title={m}>
@@ -658,7 +658,7 @@ export default function App() {
                   
                   <div className="pt-4 border-t border-slate-200 space-y-3">
                     <div className="px-1">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Space</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Casa Activa</p>
                       <button 
                         onClick={() => {
                           setIsInviteModalOpen(true);
@@ -676,14 +676,14 @@ export default function App() {
                       }}
                       className="w-full py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
                     >
-                      Switch Space
+                      Cambiar Casa
                     </button>
                     <button 
                       onClick={handleLogout}
                       className="w-full flex items-center justify-center gap-2 py-3 text-[10px] font-bold text-rose-500 hover:bg-rose-50 rounded-xl transition-colors uppercase tracking-wider"
                     >
                       <LogOut className="w-4 h-4" />
-                      Sign Out
+                      Cerrar Sesión
                     </button>
                   </div>
                 </div>
@@ -701,7 +701,7 @@ export default function App() {
               <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight truncate">
                 {navItems.find(n => n.id === activeTab)?.label}
               </h2>
-              <p className="text-slate-500 font-medium text-sm sm:text-base truncate">Hello! Ready to plan your week?</p>
+              <p className="text-slate-500 font-medium text-sm sm:text-base truncate">Hola! ¿Planificamos la comida de la semana?</p>
             </div>
 
             {activeTab === 'planner' && activeGroup && (
@@ -715,7 +715,7 @@ export default function App() {
                   title="Auto-Generate Weekly Menu"
                 >
                   <Wand2 className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">Auto-Generate</span>
+                  <span className="hidden sm:inline">Auto-Generar</span>
                 </button>
                 
                 <div className="relative">
@@ -764,15 +764,15 @@ export default function App() {
                 <div className="w-16 h-16 bg-emerald-100 rounded-3xl flex items-center justify-center mb-6">
                   <LayoutDashboard className="w-8 h-8 text-emerald-600" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">No Space Selected</h3>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">No has seleccionado una Casa</h3>
                 <p className="text-sm text-slate-500 mb-6 max-w-sm">
-                  Create a new space or select an existing one to start planning your meals.
+                  Crea una nueva casa o selecciona una existente para comenzar a planificar tus comidas.
                 </p>
                 <button 
                   onClick={() => setIsGroupModalOpen(true)}
                   className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all"
                 >
-                  Create Your First Space
+                  Crea tu Primera Casa
                 </button>
               </motion.div>
             ) : (
@@ -830,4 +830,3 @@ export default function App() {
     </div>
   );
 }
-
